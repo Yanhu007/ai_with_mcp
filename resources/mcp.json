@@ -1,0 +1,28 @@
+{
+  "mcpServers": {
+    "fetch": {
+      "command": "uvx",
+      "args": [
+        "mcp-server-fetch"
+      ]
+    },
+    "playwright": {
+      "command": "npx",
+      "args": [
+        "@playwright/mcp@latest"
+      ]
+    },
+    "Demo": {
+      "command": "uv",
+      "args": [
+        "--directory",
+        "C:\\Repo\\mcp-demo\\mcp-server-demo",
+        "run",
+        "server.py"
+      ]
+    },
+    "Demo-SSE": {
+      "url": "http://0.0.0.0:8000/sse"
+    }
+  }
+}
