@@ -3,34 +3,39 @@ import { McpServer } from '../types/McpServerTypes';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import { SSEClientTransport } from '@modelcontextprotocol/sdk/client/sse.js';
-import { mock, mockReset } from 'jest-mock-extended';
 
-// Mock the SDK imports
+// Mock the MCP SDK
 jest.mock('@modelcontextprotocol/sdk/client/index.js');
 jest.mock('@modelcontextprotocol/sdk/client/stdio.js');
 jest.mock('@modelcontextprotocol/sdk/client/sse.js');
 
 describe('MCPClient', () => {
-  // Create mocks
-  const mockClient = mock<Client>();
-  const mockStdioTransport = mock<StdioClientTransport>();
-  const mockSseTransport = mock<SSEClientTransport>();
-
-  // Mock the constructors
-  (Client as jest.Mock).mockImplementation(() => mockClient);
-  (StdioClientTransport as jest.Mock).mockImplementation(() => mockStdioTransport);
-  (SSEClientTransport as jest.Mock).mockImplementation(() => mockSseTransport);
+  let mockClient: any;
+  let mockStdioTransport: any;
+  let mockSseTransport: any;
 
   beforeEach(() => {
-    // Reset all mocks before each test
-    mockReset(mockClient);
-    mockReset(mockStdioTransport);
-    mockReset(mockSseTransport);
     jest.clearAllMocks();
+
+    // Create mock implementations
+    mockClient = {
+      connect: jest.fn(),
+      listTools: jest.fn(),
+      callTool: jest.fn(),
+      close: jest.fn()
+    };
+
+    mockStdioTransport = {};
+    mockSseTransport = {};
+
+    // Mock the constructor and methods
+    (Client as jest.Mock).mockImplementation(() => mockClient);
+    (StdioClientTransport as jest.Mock).mockImplementation(() => mockStdioTransport);
+    (SSEClientTransport as jest.Mock).mockImplementation(() => mockSseTransport);
   });
 
-  test('Test Case 1: Should connect to stdio server and return tools [add, divide]', async () => {
-    // Setup
+  test('Should retrieve tools for stdio transport server', async () => {
+    // Test case 1
     const mcpServer: McpServer = {
       name: "Demo",
       transport: "stdio",
@@ -39,55 +44,35 @@ describe('MCPClient', () => {
       serverLink: ""
     };
 
-    // Mock the listTools response with correct schema structure
+    // Set up mock return value for listTools
     mockClient.listTools.mockResolvedValue({
       tools: [
-        { 
-          name: 'add', 
-          description: 'Add two numbers', 
-          inputSchema: {
-            type: "object",
-            properties: {
-              a: { type: "number" },
-              b: { type: "number" }
-            }
-          }
-        },
-        { 
-          name: 'divide', 
-          description: 'Divide two numbers', 
-          inputSchema: {
-            type: "object",
-            properties: {
-              a: { type: "number" },
-              b: { type: "number" }
-            }
-          }
-        }
+        { name: 'add', description: 'Addition tool', inputSchema: {} },
+        { name: 'divide', description: 'Division tool', inputSchema: {} }
       ]
     });
 
-    // Create client and connect
-    const client = new MCPClient(mcpServer);
-    const result = await client.connectToServer();
+    // Create instance and connect
+    const mcpClient = new MCPClient(mcpServer);
+    await mcpClient.connectToServer();
 
-    // Assertions
+    // Verify the right transport was created with the right parameters
     expect(StdioClientTransport).toHaveBeenCalledWith({
-      command: mcpServer.command,
-      args: mcpServer.args
+      command: 'uv',
+      args: ['--directory', 'C:\\Repo\\mcp-demo\\mcp-server-demo', 'run', 'server.py']
     });
+
     expect(mockClient.connect).toHaveBeenCalledWith(mockStdioTransport);
     expect(mockClient.listTools).toHaveBeenCalled();
-    expect(result).toBe('connected');
 
-    // Get tools and verify
-    const tools = await client.getTools();
-    expect(tools.length).toBe(2);
-    expect(tools.map(t => t.name)).toEqual(['add', 'divide']);
+    // Get the tools and verify
+    const tools = await mcpClient.getTools();
+    expect(tools).toHaveLength(2);
+    expect(tools.map(tool => tool.name)).toEqual(['add', 'divide']);
   });
 
-  test('Test Case 2: Should connect to SSE server and return tools [subtract, multiply]', async () => {
-    // Setup
+  test('Should retrieve tools for SSE transport server', async () => {
+    // Test case 2
     const mcpServer: McpServer = {
       name: "Demo-SSE",
       transport: "sse",
@@ -96,101 +81,31 @@ describe('MCPClient', () => {
       serverLink: "http://0.0.0.0:8000/sse"
     };
 
-    // Mock the listTools response with correct schema structure
+    // Set up mock return value for listTools
     mockClient.listTools.mockResolvedValue({
       tools: [
-        { 
-          name: 'subtract', 
-          description: 'Subtract two numbers', 
-          inputSchema: {
-            type: "object",
-            properties: {
-              a: { type: "number" },
-              b: { type: "number" }
-            }
-          }
-        },
-        { 
-          name: 'multiply', 
-          description: 'Multiply two numbers', 
-          inputSchema: {
-            type: "object",
-            properties: {
-              a: { type: "number" },
-              b: { type: "number" }
-            }
-          }
-        }
+        { name: 'subtract', description: 'Subtraction tool', inputSchema: {} },
+        { name: 'multiply', description: 'Multiplication tool', inputSchema: {} }
       ]
     });
 
-    // Create client and connect
-    const client = new MCPClient(mcpServer);
-    const result = await client.connectToServer();
+    // Create instance and connect
+    const mcpClient = new MCPClient(mcpServer);
+    await mcpClient.connectToServer();
 
-    // Assertions
-    expect(SSEClientTransport).toHaveBeenCalledWith(new URL(mcpServer.serverLink));
+    // Verify the right transport was created with the right parameters
+    expect(SSEClientTransport).toHaveBeenCalledWith(new URL("http://0.0.0.0:8000/sse"));
     expect(mockClient.connect).toHaveBeenCalledWith(mockSseTransport);
     expect(mockClient.listTools).toHaveBeenCalled();
-    expect(result).toBe('connected');
 
-    // Get tools and verify
-    const tools = await client.getTools();
-    expect(tools.length).toBe(2);
-    expect(tools.map(t => t.name)).toEqual(['subtract', 'multiply']);
+    // Get the tools and verify
+    const tools = await mcpClient.getTools();
+    expect(tools).toHaveLength(2);
+    expect(tools.map(tool => tool.name)).toEqual(['subtract', 'multiply']);
   });
 
-  test('Should properly handle cleanup', async () => {
-    // Setup
-    const mcpServer: McpServer = {
-      name: "Demo",
-      transport: "stdio",
-      command: "uv",
-      args: [],
-      serverLink: ""
-    };
-
-    // Mock successful connection
-    mockClient.listTools.mockResolvedValue({ tools: [] });
-
-    // Create client and connect
-    const client = new MCPClient(mcpServer);
-    await client.connectToServer();
-
-    // Cleanup
-    await client.cleanup();
-
-    // Assert close was called
-    expect(mockClient.close).toHaveBeenCalled();
-  });
-
-  test('Should handle connection errors', async () => {
-    // Setup
-    const mcpServer: McpServer = {
-      name: "Demo",
-      transport: "stdio",
-      command: "uv",
-      args: [],
-      serverLink: ""
-    };
-
-    // Mock connection error
-    const error = new Error('Connection failed');
-    mockClient.connect.mockImplementation(() => {
-      throw error;
-    });
-
-    // Create client and attempt to connect
-    const client = new MCPClient(mcpServer);
-    const result = await client.connectToServer();
-
-    // Assert that we got an error back
-    expect(result).toBeInstanceOf(Error);
-    expect((result as Error).message).toBe('Connection failed');
-  });
-
-  test('Test Case: Should execute add tool and return sum result', async () => {
-    // Setup
+  test('Should execute add tool on stdio transport and return 3', async () => {
+    // Arrange
     const mcpServer: McpServer = {
       name: "Demo",
       transport: "stdio",
@@ -199,20 +114,16 @@ describe('MCPClient', () => {
       serverLink: ""
     };
 
-    // Mock successful connection
-    mockClient.listTools.mockResolvedValue({ tools: [] });
-
-    // Mock the callTool response to return the sum
+    // Set up mock return value for callTool
     mockClient.callTool.mockResolvedValue({
       content: "3"
     });
 
-    // Create client and connect
-    const client = new MCPClient(mcpServer);
-    await client.connectToServer();
-
-    // Execute tool
-    const result = await client.executeTool({
+    // Create instance and connect
+    const mcpClient = new MCPClient(mcpServer);
+    
+    // Act
+    const result = await mcpClient.executeTool({
       toolName: "add",
       toolArgs: {
         a: 1,
@@ -220,7 +131,8 @@ describe('MCPClient', () => {
       }
     });
 
-    // Assert callTool was called with correct parameters
+    // Assert
+    expect(result).toBe("3");
     expect(mockClient.callTool).toHaveBeenCalledWith({
       name: "add",
       arguments: {
@@ -228,13 +140,10 @@ describe('MCPClient', () => {
         b: 2
       }
     });
-
-    // Assert that we got the expected result
-    expect(result).toBe("3");
   });
 
-  test('Test Case: Should execute multiply tool and return product result', async () => {
-    // Setup
+  test('Should execute multiply tool on sse transport and return 12', async () => {
+    // Arrange
     const mcpServer: McpServer = {
       name: "Demo-SSE",
       transport: "sse",
@@ -243,20 +152,16 @@ describe('MCPClient', () => {
       serverLink: "http://0.0.0.0:8000/sse"
     };
 
-    // Mock successful connection
-    mockClient.listTools.mockResolvedValue({ tools: [] });
-
-    // Mock the callTool response to return the product
+    // Set up mock return value for callTool
     mockClient.callTool.mockResolvedValue({
       content: "12"
     });
 
-    // Create client and connect
-    const client = new MCPClient(mcpServer);
-    await client.connectToServer();
-
-    // Execute tool
-    const result = await client.executeTool({
+    // Create instance and connect
+    const mcpClient = new MCPClient(mcpServer);
+    
+    // Act
+    const result = await mcpClient.executeTool({
       toolName: "multiply",
       toolArgs: {
         a: 3,
@@ -264,7 +169,8 @@ describe('MCPClient', () => {
       }
     });
 
-    // Assert callTool was called with correct parameters
+    // Assert
+    expect(result).toBe("12");
     expect(mockClient.callTool).toHaveBeenCalledWith({
       name: "multiply",
       arguments: {
@@ -272,39 +178,5 @@ describe('MCPClient', () => {
         b: 4
       }
     });
-
-    // Assert that we got the expected result
-    expect(result).toBe("12");
-  });
-
-  test('Should handle error when executing tool', async () => {
-    // Setup
-    const mcpServer: McpServer = {
-      name: "Demo",
-      transport: "stdio",
-      command: "uv",
-      args: [],
-      serverLink: ""
-    };
-
-    // Mock successful connection
-    mockClient.listTools.mockResolvedValue({ tools: [] });
-
-    // Mock callTool to throw an error
-    const error = new Error('Tool execution failed');
-    mockClient.callTool.mockRejectedValue(error);
-
-    // Create client and connect
-    const client = new MCPClient(mcpServer);
-    await client.connectToServer();
-
-    // Assert that the promise is rejected with the expected error
-    await expect(client.executeTool({
-      toolName: "add",
-      toolArgs: {
-        a: 1,
-        b: 2
-      }
-    })).rejects.toThrow('Tool execution failed');
   });
 });

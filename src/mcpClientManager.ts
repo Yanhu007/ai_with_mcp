@@ -147,6 +147,24 @@ export class MCPClientManager {
   }
   
   /**
+   * Execute a tool with the given name and arguments
+   * 
+   * @param toolName - The name of the tool to execute
+   * @param toolArgs - The arguments to pass to the tool
+   * @returns The tool's response content as a string
+   * @throws Error if the tool or client is not found
+   */
+  async executeTool({ toolName, toolArgs }: { toolName: string, toolArgs: { [key: string]: unknown } }): Promise<string> {
+    const client = this.getClientByToolName(toolName);
+    
+    if (!client) {
+      throw new Error(`No client found for tool: ${toolName}`);
+    }
+    
+    return client.executeTool({ toolName, toolArgs });
+  }
+  
+  /**
    * Clean up all MCPClient instances
    */
   async cleanup(): Promise<void> {
