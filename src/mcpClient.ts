@@ -30,7 +30,7 @@ export class MCPClient {
           }) 
         : new SSEClientTransport(new URL(this.server.serverLink));
 
-      this.mcp.connect(this.transport);
+      await this.mcp.connect(this.transport);
 
       // List available tools
       const toolsResult = await this.mcp.listTools();

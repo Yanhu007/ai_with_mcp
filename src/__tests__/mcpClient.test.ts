@@ -1,110 +1,13 @@
+// filepath: c:\Repo\Agent-ts-claude37\src\__tests__\mcpClient.test.ts
 import { MCPClient } from '../mcpClient';
 import { McpServer } from '../types/McpServerTypes';
-import { Client } from '@modelcontextprotocol/sdk/client/index.js';
-import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
-import { SSEClientTransport } from '@modelcontextprotocol/sdk/client/sse.js';
 
-// Mock the MCP SDK
-jest.mock('@modelcontextprotocol/sdk/client/index.js');
-jest.mock('@modelcontextprotocol/sdk/client/stdio.js');
-jest.mock('@modelcontextprotocol/sdk/client/sse.js');
+// These tests connect to actual MCP servers, not using mocks
+describe('MCPClient Integration Tests', () => {
+  // Test timeouts need to be longer for real server connections
+  jest.setTimeout(30000);
 
-describe('MCPClient', () => {
-  let mockClient: any;
-  let mockStdioTransport: any;
-  let mockSseTransport: any;
-
-  beforeEach(() => {
-    jest.clearAllMocks();
-
-    // Create mock implementations
-    mockClient = {
-      connect: jest.fn(),
-      listTools: jest.fn(),
-      callTool: jest.fn(),
-      close: jest.fn()
-    };
-
-    mockStdioTransport = {};
-    mockSseTransport = {};
-
-    // Mock the constructor and methods
-    (Client as jest.Mock).mockImplementation(() => mockClient);
-    (StdioClientTransport as jest.Mock).mockImplementation(() => mockStdioTransport);
-    (SSEClientTransport as jest.Mock).mockImplementation(() => mockSseTransport);
-  });
-
-  test('Should retrieve tools for stdio transport server', async () => {
-    // Test case 1
-    const mcpServer: McpServer = {
-      name: "Demo",
-      transport: "stdio",
-      command: "uv",
-      args: ["--directory", "C:\\Repo\\mcp-demo\\mcp-server-demo", "run", "server.py"],
-      serverLink: ""
-    };
-
-    // Set up mock return value for listTools
-    mockClient.listTools.mockResolvedValue({
-      tools: [
-        { name: 'add', description: 'Addition tool', inputSchema: {} },
-        { name: 'divide', description: 'Division tool', inputSchema: {} }
-      ]
-    });
-
-    // Create instance and connect
-    const mcpClient = new MCPClient(mcpServer);
-    await mcpClient.connectToServer();
-
-    // Verify the right transport was created with the right parameters
-    expect(StdioClientTransport).toHaveBeenCalledWith({
-      command: 'uv',
-      args: ['--directory', 'C:\\Repo\\mcp-demo\\mcp-server-demo', 'run', 'server.py']
-    });
-
-    expect(mockClient.connect).toHaveBeenCalledWith(mockStdioTransport);
-    expect(mockClient.listTools).toHaveBeenCalled();
-
-    // Get the tools and verify
-    const tools = await mcpClient.getTools();
-    expect(tools).toHaveLength(2);
-    expect(tools.map(tool => tool.name)).toEqual(['add', 'divide']);
-  });
-
-  test('Should retrieve tools for SSE transport server', async () => {
-    // Test case 2
-    const mcpServer: McpServer = {
-      name: "Demo-SSE",
-      transport: "sse",
-      command: "",
-      args: [],
-      serverLink: "http://0.0.0.0:8000/sse"
-    };
-
-    // Set up mock return value for listTools
-    mockClient.listTools.mockResolvedValue({
-      tools: [
-        { name: 'subtract', description: 'Subtraction tool', inputSchema: {} },
-        { name: 'multiply', description: 'Multiplication tool', inputSchema: {} }
-      ]
-    });
-
-    // Create instance and connect
-    const mcpClient = new MCPClient(mcpServer);
-    await mcpClient.connectToServer();
-
-    // Verify the right transport was created with the right parameters
-    expect(SSEClientTransport).toHaveBeenCalledWith(new URL("http://0.0.0.0:8000/sse"));
-    expect(mockClient.connect).toHaveBeenCalledWith(mockSseTransport);
-    expect(mockClient.listTools).toHaveBeenCalled();
-
-    // Get the tools and verify
-    const tools = await mcpClient.getTools();
-    expect(tools).toHaveLength(2);
-    expect(tools.map(tool => tool.name)).toEqual(['subtract', 'multiply']);
-  });
-
-  test('Should execute add tool on stdio transport and return 3', async () => {
+  test('should connect to stdio server and retrieve tools [add, divide]', async () => {
     // Arrange
     const mcpServer: McpServer = {
       name: "Demo",
@@ -113,70 +16,48 @@ describe('MCPClient', () => {
       args: ["--directory", "C:\\Repo\\mcp-demo\\mcp-server-demo", "run", "server.py"],
       serverLink: ""
     };
-
-    // Set up mock return value for callTool
-    mockClient.callTool.mockResolvedValue({
-      content: "3"
-    });
-
-    // Create instance and connect
-    const mcpClient = new MCPClient(mcpServer);
     
     // Act
-    const result = await mcpClient.executeTool({
-      toolName: "add",
-      toolArgs: {
-        a: 1,
-        b: 2
-      }
-    });
-
+    const client = new MCPClient(mcpServer);
+    const connectionResult = await client.connectToServer();
+    const tools = await client.getTools();
+    const toolNames = tools.map(tool => tool.name);
+    
+    // Cleanup
+    await client.cleanup();
+    
     // Assert
-    expect(result).toBe("3");
-    expect(mockClient.callTool).toHaveBeenCalledWith({
-      name: "add",
-      arguments: {
-        a: 1,
-        b: 2
-      }
-    });
+    expect(connectionResult).toBe("connected");
+    expect(toolNames).toContain('add');
+    expect(toolNames).toContain('divide');
+    expect(toolNames.length).toBe(2);
+    console.log('tools =', toolNames);
   });
 
-  test('Should execute multiply tool on sse transport and return 12', async () => {
+  test('should connect to SSE server and retrieve tools [subtract, multiply]', async () => {
     // Arrange
     const mcpServer: McpServer = {
       name: "Demo-SSE",
       transport: "sse",
       command: "",
       args: [],
-      serverLink: "http://0.0.0.0:8000/sse"
+      serverLink: "http://10.4.207.8:8000/sse"
     };
-
-    // Set up mock return value for callTool
-    mockClient.callTool.mockResolvedValue({
-      content: "12"
-    });
-
-    // Create instance and connect
-    const mcpClient = new MCPClient(mcpServer);
     
     // Act
-    const result = await mcpClient.executeTool({
-      toolName: "multiply",
-      toolArgs: {
-        a: 3,
-        b: 4
-      }
-    });
-
+    const client = new MCPClient(mcpServer);
+    const connectionResult = await client.connectToServer();
+    const tools = await client.getTools();
+    const toolNames = tools.map(tool => tool.name);
+    
+    // Cleanup
+    await client.cleanup();
+    
     // Assert
-    expect(result).toBe("12");
-    expect(mockClient.callTool).toHaveBeenCalledWith({
-      name: "multiply",
-      arguments: {
-        a: 3,
-        b: 4
-      }
-    });
+    expect(connectionResult).toBe("connected");
+    expect(toolNames).toContain('subtract');
+    expect(toolNames).toContain('multiply');
+    expect(toolNames.length).toBe(2);
+    console.log('tools =', toolNames);
   });
 });

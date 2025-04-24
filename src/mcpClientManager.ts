@@ -30,8 +30,13 @@ export class MCPClientManager {
       const configData = await fs.promises.readFile(configPath, 'utf-8');
       const config: McpConfigFile = JSON.parse(configData);
       
+      console.log('Loaded MCP configuration:', JSON.stringify(config, null, 2));
+      
       // Create and initialize MCPClient instances for each server
-      for (const [serverName, serverConfig] of Object.entries(config.mcpServers)) {
+      const serverEntries = Object.entries(config.mcpServers);
+      for (let i = 0; i < serverEntries.length; i++) {
+        const [serverName, serverConfig] = serverEntries[i];
+        
         // Convert the config format to match McpServer interface
         const mcpServer: McpServer = {
           name: serverName,
@@ -40,6 +45,8 @@ export class MCPClientManager {
           args: serverConfig.args || [],
           serverLink: serverConfig.url || ''
         };
+        
+        console.log(`Initializing MCPClient for server ${serverName} with config:`, mcpServer);
         
         // Create a new MCPClient instance
         const client = new MCPClient(mcpServer);
@@ -57,9 +64,15 @@ export class MCPClientManager {
             tools.forEach(tool => {
               this.toolToClientMap.set(tool.name, client);
             });
+            
+            console.log(`Client ${serverName} initialized successfully with ${tools.length} tools.`);
+          } else if (result instanceof Error) {
+            console.error(`Failed to connect to server ${serverName}:`, result.message);
+            // Keep the client in the map even if initial connection failed
+            // It might be able to connect later
           }
         } catch (error) {
-          console.error(`Failed to initialize MCPClient for server ${serverName}:`, error);
+          console.error(`Error initializing MCPClient for server ${serverName}:`, error);
         }
       }
     } catch (error) {

@@ -1,6 +1,33 @@
-const { ipcRenderer } = require('electron');
-const { marked } = require('marked');
-const hljs = require('highlight.js');
+// MCP Client Manager setup
+let availableTools = [];
+
+// Initialize MCP Client Manager
+async function initMcpClientManager() {
+  try {
+    // 获取MCP客户端管理器的状态
+    const mcpManagerAvailable = await api.invoke('get-mcp-client-manager');
+    
+    if (mcpManagerAvailable) {
+      // 获取可用工具
+      availableTools = await api.invoke('get-all-mcp-tools');
+      
+      console.log('MCP Client Manager initialized with tools:', 
+        availableTools.map(tool => tool.name));
+      
+      // 为Azure OpenAI API格式化工具
+      availableTools = availableTools.map(tool => ({
+        type: "function",
+        function: {
+          name: tool.name,
+          description: tool.description || "",
+          parameters: tool.inputSchema
+        }
+      }));
+    }
+  } catch (error) {
+    console.error('Failed to initialize MCP Client Manager:', error);
+  }
+}
 
 // Element references
 const chatContainer = document.getElementById('chat-container');
@@ -20,10 +47,10 @@ const chatHistory = [];
 
 // Configuration
 let config = {
-  apiKey: '',
-  endpoint: '',
-  deploymentName: '',
-  apiVersion: '2023-05-15'
+  apiKey: '117a0bc586aa4711a95ca960560295cc',
+  endpoint: 'https://yanhuopenapi.openai.azure.com',
+  deploymentName: 'gpt-4o',
+  apiVersion: '2025-01-01-preview'
 };
 
 // Configure marked for syntax highlighting
@@ -37,9 +64,6 @@ marked.setOptions({
   breaks: true,
   gfm: true
 });
-
-// Load configuration on startup
-loadConfig();
 
 // Event listeners
 sendButton.addEventListener('click', sendMessage);
@@ -66,9 +90,16 @@ window.addEventListener('click', (e) => {
 
 saveConfigButton.addEventListener('click', saveConfig);
 
+// Initialize on DOMContentLoaded
+document.addEventListener('DOMContentLoaded', async () => {
+  await loadConfig();
+  await initMcpClientManager();
+  console.log('MCP Client Manager initialized successfully');
+});
+
 // Functions
 async function loadConfig() {
-  const result = await ipcRenderer.invoke('load-config');
+  const result = await api.invoke('load-config');
   if (result.success) {
     config = result.data;
     apiKeyInput.value = config.apiKey;
@@ -88,7 +119,7 @@ async function saveConfig() {
     apiVersion: apiVersionInput.value
   };
 
-  const result = await ipcRenderer.invoke('save-config', config);
+  const result = await api.invoke('save-config', config);
   if (result.success) {
     configModal.style.display = 'none';
   } else {
@@ -124,21 +155,31 @@ async function sendMessage() {
     // Disable send button during API call
     sendButton.disabled = true;
     
-    // Create response message container
-    const responseId = 'response-' + Date.now();
-    const responseElement = document.createElement('div');
-    responseElement.className = 'message assistant-message';
-    responseElement.innerHTML = `<div id="${responseId}" class="message-content"></div>`;
-    chatContainer.appendChild(responseElement);
-    const responseContentElement = document.getElementById(responseId);
-    
-    // Remove typing indicator
-    if (indicatorElement) {
-      indicatorElement.remove();
+    // Process conversation with tools if available
+    if (availableTools.length > 0) {
+      // Remove typing indicator
+      if (indicatorElement) {
+        indicatorElement.remove();
+      }
+      
+      await processConversationWithMCP();
+    } else {
+      // Create response message container for streaming response
+      const responseId = 'response-' + Date.now();
+      const responseElement = document.createElement('div');
+      responseElement.className = 'message assistant-message';
+      responseElement.innerHTML = `<div id="${responseId}" class="message-content"></div>`;
+      chatContainer.appendChild(responseElement);
+      const responseContentElement = document.getElementById(responseId);
+      
+      // Remove typing indicator
+      if (indicatorElement) {
+        indicatorElement.remove();
+      }
+      
+      // Make API request to Azure OpenAI with streaming (without tools)
+      await streamChatCompletion(chatHistory, responseContentElement);
     }
-    
-    // Make API request to Azure OpenAI with streaming
-    await streamChatCompletion(chatHistory, responseContentElement);
     
     // Scroll to bottom
     chatContainer.scrollTop = chatContainer.scrollHeight;
@@ -258,5 +299,211 @@ async function streamChatCompletion(messages, responseElement) {
     } else {
       throw error;
     }
+  }
+}
+
+async function processConversationWithMCP() {
+  let requiresFollowUp = true;
+  let toolResults = [];
+  
+  while (requiresFollowUp) {
+    // Build messages history with tool results
+    const messagesWithTools = [...chatHistory];
+    
+    // Check if the last message is from assistant and contains tool calls
+    const lastAssistantMessageIndex = findLastAssistantWithToolCallsIndex(messagesWithTools);
+
+    if (lastAssistantMessageIndex !== -1 && toolResults.length > 0) {
+      const lastAssistantMessage = messagesWithTools[lastAssistantMessageIndex];
+
+      // Ensure each tool call has a corresponding tool response
+      for (const toolCall of lastAssistantMessage.tool_calls) {
+        // Check if this tool call already has a response
+        const hasResponse = messagesWithTools.some(msg =>
+          msg.role === 'tool' && msg.tool_call_id === toolCall.id
+        );
+
+        // If no response and we have a matching result, add tool response
+        if (!hasResponse) {
+          const toolResult = toolResults.find(tr => tr.tool_call_id === toolCall.id);
+          if (toolResult) {
+            messagesWithTools.push({
+              role: "tool",
+              tool_call_id: toolResult.tool_call_id,
+              name: toolResult.name,
+              content: toolResult.content
+            });
+
+            // Remove from pending results
+            toolResults = toolResults.filter(tr => tr.tool_call_id !== toolCall.id);
+          } else {
+            // If no matching result, might be an error during execution, add error response
+            console.warn(`No result found for tool call ID ${toolCall.id}, adding default error response`);
+            messagesWithTools.push({
+              role: "tool",
+              tool_call_id: toolCall.id,
+              name: toolCall.function.name,
+              content: JSON.stringify({ error: "Tool execution failed or timed out" })
+            });
+          }
+        }
+      }
+    }
+    
+    // Log messages for debugging
+    console.log('Sending messages to API:', JSON.stringify(messagesWithTools, null, 2));
+
+    // Call API with tools
+    const response = await callAzureOpenAIWithTools(messagesWithTools);
+    
+    // Process response
+    if (response.tool_calls && response.tool_calls.length > 0) {
+      // AI requested tool use
+      
+      // Add assistant message to history with all tool calls
+      chatHistory.push({
+        role: "assistant",
+        content: response.content || "",
+        tool_calls: response.tool_calls
+      });
+      
+      // Show thinking message if content provided
+      if (response.content) {
+        addMessageToUI('assistant', response.content);
+      }
+
+      // Process each tool call
+      for (const toolCall of response.tool_calls) {
+        const toolName = toolCall.function.name;
+        addMessageToUI('system', `Using tool: ${toolName}...`);
+
+        // Execute tool call
+        try {
+          const toolResult = await executeToolCall(toolCall);
+
+          // Add result to tool results list
+          toolResults.push({
+            tool_call_id: toolCall.id,
+            name: toolCall.function.name,
+            content: JSON.stringify(toolResult)
+          });
+
+          // Immediately add tool response to chat history
+          chatHistory.push({
+            role: "tool",
+            tool_call_id: toolCall.id,
+            name: toolCall.function.name,
+            content: JSON.stringify(toolResult)
+          });
+        } catch (error) {
+          console.error(`Error executing tool ${toolName}:`, error);
+
+          // Add error response
+          const errorResult = { error: `Tool execution failed: ${error.message}` };
+          toolResults.push({
+            tool_call_id: toolCall.id,
+            name: toolCall.function.name,
+            content: JSON.stringify(errorResult)
+          });
+
+          // Add to chat history
+          chatHistory.push({
+            role: "tool",
+            tool_call_id: toolCall.id,
+            name: toolCall.function.name,
+            content: JSON.stringify(errorResult)
+          });
+        }
+      }
+      
+      // Still need follow-up processing
+      requiresFollowUp = true;
+    } else {
+      // Final response, no tools needed
+      
+      // Add AI reply to UI
+      addMessageToUI('assistant', response.content);
+      
+      // Add AI reply to history
+      chatHistory.push({
+        role: "assistant",
+        content: response.content
+      });
+      
+      // Processing complete
+      requiresFollowUp = false;
+    }
+  }
+}
+
+// Find the index of the last assistant message with tool calls
+function findLastAssistantWithToolCallsIndex(messages) {
+  for (let i = messages.length - 1; i >= 0; i--) {
+    if (messages[i].role === 'assistant' && messages[i].tool_calls && messages[i].tool_calls.length > 0) {
+      return i;
+    }
+  }
+  return -1;
+}
+
+// Call Azure OpenAI API with tools
+async function callAzureOpenAIWithTools(messages) {
+  const apiUrl = `${config.endpoint}/openai/deployments/${config.deploymentName}/chat/completions?api-version=${config.apiVersion}`;
+  
+  // Use tools from MCP servers
+  const body = {
+    messages: messages,
+    temperature: 0.7,
+    max_tokens: 16384,
+    tools: availableTools,
+    tool_choice: "auto"
+  };
+  
+  const response = await fetch(apiUrl, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'api-key': config.apiKey
+    },
+    body: JSON.stringify(body)
+  });
+  
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`API request failed: ${response.status} ${response.statusText} - ${errorText}`);
+  }
+  
+  const data = await response.json();
+  return data.choices[0].message;
+}
+
+// Execute a tool call using mcpClientManager via IPC
+async function executeToolCall(toolCall) {
+  const { name, arguments: args } = toolCall.function;
+  const parsedArgs = JSON.parse(args);
+
+  console.log(`Executing tool: ${name}, arguments:`, parsedArgs);
+
+  try {
+    // Execute tool through IPC 
+    const result = await api.invoke('execute-mcp-tool', { 
+      toolName: name, 
+      toolArgs: parsedArgs 
+    });
+    
+    // Try to parse the result as JSON if it's a string
+    if (typeof result === 'string') {
+      try {
+        return JSON.parse(result);
+      } catch (e) {
+        // If not valid JSON, return as text
+        return { text: result };
+      }
+    }
+    
+    return result;
+  } catch (error) {
+    console.error(`Error executing MCP tool ${name}:`, error);
+    throw error;
   }
 }
