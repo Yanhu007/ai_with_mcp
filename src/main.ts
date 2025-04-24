@@ -30,9 +30,9 @@ function createWindow() {
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
-      webSecurity: false, // Keep web security enabled
+      webSecurity: true, // Keep web security enabled
       allowRunningInsecureContent: false,
-      preload: path.join(__dirname, app.isPackaged ? './preload.js' : '../dist/preload.js')
+      preload: path.join(__dirname, '../src/preload.js'),
     }
   });
 
@@ -58,41 +58,8 @@ function createWindow() {
 
 // Create window when Electron is ready
 app.whenReady().then(async () => {
-  // Configure network permissions before initializing MCP
-  session.defaultSession.webRequest.onBeforeSendHeaders((details, callback) => {
-    // Allow proper headers for SSE connections
-    const requestHeaders = { ...details.requestHeaders };
-    
-    // Add CORS headers if needed
-    requestHeaders['Access-Control-Allow-Origin'] = '*';
-    
-    // Add specific headers for SSE connections
-    if (details.url.includes('/sse')) {
-      requestHeaders['Accept'] = 'text/event-stream';
-      requestHeaders['Cache-Control'] = 'no-cache';
-      requestHeaders['Connection'] = 'keep-alive';
-    }
-    
-    callback({ requestHeaders });
-  });
-
-  // Configure response handling
-  session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
-    const responseHeaders = { ...details.responseHeaders };
-    
-    // Add CORS headers to responses
-    responseHeaders['Access-Control-Allow-Origin'] = '*';
-    responseHeaders['Access-Control-Allow-Headers'] = '*';
-    responseHeaders['Access-Control-Allow-Methods'] = 'GET, POST, OPTIONS';
-    
-    callback({ responseHeaders });
-  });
-
-  // 设置网络请求超时
-  app.commandLine.appendSwitch('disable-http-cache');
-  app.commandLine.appendSwitch('ignore-certificate-errors');
-  
   await initMcpClientManager();
+  setupIpcHandlers();
   createWindow();
 });
 
@@ -109,6 +76,8 @@ app.on('activate', () => {
   }
 });
 
+// 注册 IPC 处理程序
+function setupIpcHandlers() {
 // IPC handlers for Azure OpenAI API configuration
 ipcMain.handle('save-config', async (event, config) => {
   try {
@@ -192,3 +161,4 @@ ipcMain.handle('execute-mcp-tool', async (event, { toolName, toolArgs }) => {
     throw error;
   }
 });
+}

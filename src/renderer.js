@@ -1,3 +1,10 @@
+const ipcRenderer = typeof window !== 'undefined' && window?.electron?.ipcRenderer;
+
+// 对于测试环境，我们允许使用 mock 的 IPC
+if (!ipcRenderer) {
+  throw new Error('Electron IPC is not available');
+}
+
 // MCP Client Manager setup
 let availableTools = [];
 
@@ -5,11 +12,11 @@ let availableTools = [];
 async function initMcpClientManager() {
   try {
     // 获取MCP客户端管理器的状态
-    const mcpManagerAvailable = await api.invoke('get-mcp-client-manager');
+    const mcpManagerAvailable = await ipcRenderer.invoke('get-mcp-client-manager');
     
     if (mcpManagerAvailable) {
       // 获取可用工具
-      availableTools = await api.invoke('get-all-mcp-tools');
+      availableTools = await ipcRenderer.invoke('get-all-mcp-tools');
       
       console.log('MCP Client Manager initialized with tools:', 
         availableTools.map(tool => tool.name));
@@ -48,22 +55,10 @@ const chatHistory = [];
 // Configuration
 let config = {
   apiKey: '117a0bc586aa4711a95ca960560295cc',
-  endpoint: 'https://yanhuopenapi.openai.azure.com',
+  endpoint: 'https://yanhuopenipcRenderer.openai.azure.com',
   deploymentName: 'gpt-4o',
   apiVersion: '2025-01-01-preview'
 };
-
-// Configure marked for syntax highlighting
-marked.setOptions({
-  highlight: function(code, lang) {
-    if (lang && hljs.getLanguage(lang)) {
-      return hljs.highlight(code, { language: lang }).value;
-    }
-    return hljs.highlightAuto(code).value;
-  },
-  breaks: true,
-  gfm: true
-});
 
 // Event listeners
 sendButton.addEventListener('click', sendMessage);
@@ -99,7 +94,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
 // Functions
 async function loadConfig() {
-  const result = await api.invoke('load-config');
+  const result = await ipcRenderer.invoke('load-config');
   if (result.success) {
     config = result.data;
     apiKeyInput.value = config.apiKey;
@@ -119,7 +114,7 @@ async function saveConfig() {
     apiVersion: apiVersionInput.value
   };
 
-  const result = await api.invoke('save-config', config);
+  const result = await ipcRenderer.invoke('save-config', config);
   if (result.success) {
     configModal.style.display = 'none';
   } else {
@@ -203,8 +198,7 @@ function addMessageToUI(role, content) {
   messageElement.className = `message ${role}-message`;
   
   if (role === 'assistant') {
-    // Render markdown for assistant messages
-    messageElement.innerHTML = `<div class="message-content">${marked.parse(content)}</div>`;
+    messageElement.innerHTML = `<div class="message-content">${content}</div>`;
   } else {
     // Simple text for user messages
     messageElement.innerHTML = `<div class="message-content">${content}</div>`;
@@ -278,7 +272,7 @@ async function streamChatCompletion(messages, responseElement) {
             if (jsonData.choices && jsonData.choices[0]?.delta?.content) {
               const content = jsonData.choices[0].delta.content;
               responseText += content;
-              responseElement.innerHTML = marked.parse(responseText);
+              responseElement.innerHTML = responseText;
               
               // Scroll to bottom
               chatContainer.scrollTop = chatContainer.scrollHeight;
@@ -486,7 +480,7 @@ async function executeToolCall(toolCall) {
 
   try {
     // Execute tool through IPC 
-    const result = await api.invoke('execute-mcp-tool', { 
+    const result = await ipcRenderer.invoke('execute-mcp-tool', { 
       toolName: name, 
       toolArgs: parsedArgs 
     });
