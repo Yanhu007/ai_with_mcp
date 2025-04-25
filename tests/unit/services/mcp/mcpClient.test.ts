@@ -1,6 +1,5 @@
-// filepath: c:\Repo\Agent-ts-claude37\src\__tests__\mcpClient.test.ts
-import { MCPClient } from '../main/services/mcpClient';
-import { McpServer } from '../main/types/McpServerTypes';
+import { MCPClient } from '../../../../src/main/services/mcpClient';
+import { McpServer } from '../../../../src/main/types/McpServerTypes';
 
 // These tests connect to actual MCP servers, not using mocks
 describe('MCPClient Integration Tests', () => {
@@ -21,7 +20,7 @@ describe('MCPClient Integration Tests', () => {
     const client = new MCPClient(mcpServer);
     const connectionResult = await client.connectToServer();
     const tools = await client.getTools();
-    const toolNames = tools.map((tool: { name: string }) => tool.name);
+    const toolNames = tools.map(tool => tool.name);
     
     // Cleanup
     await client.cleanup();
@@ -48,7 +47,7 @@ describe('MCPClient Integration Tests', () => {
     const client = new MCPClient(mcpServer);
     const connectionResult = await client.connectToServer();
     const tools = await client.getTools();
-    const toolNames = tools.map((tool: { name: string }) => tool.name);
+    const toolNames = tools.map(tool => tool.name);
     
     // Cleanup
     await client.cleanup();

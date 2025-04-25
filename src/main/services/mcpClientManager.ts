@@ -1,5 +1,5 @@
 import { MCPClient } from './mcpClient';
-import { McpServer } from './types/McpServerTypes';
+import { McpServer } from '../types/McpServerTypes';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -24,7 +24,7 @@ export class MCPClientManager {
    * @param configPath - Path to the MCP configuration JSON file
    * @returns A promise that resolves when all clients are initialized
    */
-  async initialize(configPath: string = path.join(__dirname, '../resources/mcp.json')): Promise<void> {
+  async initialize(configPath: string = path.join(__dirname, '../../../resources/mcp.json')): Promise<void> {
     try {
       // Read and parse the MCP configuration file
       const configData = await fs.promises.readFile(configPath, 'utf-8');

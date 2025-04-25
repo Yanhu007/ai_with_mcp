@@ -8,6 +8,9 @@ if (!ipcRenderer) {
 // MCP Client Manager setup
 let availableTools = [];
 
+// System messages that only appear in UI but not in chat history
+const systemMessages = [];
+
 // Initialize MCP Client Manager
 async function initMcpClientManager() {
   try {
@@ -223,6 +226,37 @@ function addTypingIndicator() {
   return indicatorElement;
 }
 
+// Function to add a temporary system message that appears in UI but not in chat history
+function addUISystemMessage(content) {
+  const systemMsg = { role: 'system', content };
+  systemMessages.push(systemMsg);
+  
+  // Display the message in UI
+  const messageElement = document.createElement('div');
+  messageElement.className = 'message system-message';
+  messageElement.innerHTML = `<div class="message-content">${content}</div>`;
+  messageElement.dataset.systemMessageId = Date.now().toString(); // Add a unique ID to find this message later
+  chatContainer.appendChild(messageElement);
+  chatContainer.scrollTop = chatContainer.scrollHeight;
+  
+  // Clean up system message after a delay
+  setTimeout(() => {
+    // Remove from systemMessages array
+    const index = systemMessages.findIndex(msg => msg.content === content);
+    if (index !== -1) {
+      systemMessages.splice(index, 1);
+    }
+    
+    // Remove from UI if it still exists
+    const messageToRemove = document.querySelector(`.system-message[data-system-message-id="${messageElement.dataset.systemMessageId}"]`);
+    if (messageToRemove) {
+      messageToRemove.remove();
+    }
+  }, 5000); // Remove after 5 seconds
+  
+  return messageElement;
+}
+
 async function streamChatCompletion(messages, responseElement) {
   try {
     const controller = new AbortController();
@@ -369,7 +403,8 @@ async function processConversationWithMCP() {
       // Process each tool call
       for (const toolCall of response.tool_calls) {
         const toolName = toolCall.function.name;
-        addMessageToUI('system', `Using tool: ${toolName}...`);
+        // Use the new UI system message function instead of adding to chat history
+        addUISystemMessage(`Using tool: ${toolName}...`);
 
         // Execute tool call
         try {

@@ -1,7 +1,7 @@
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { SSEClientTransport } from "@modelcontextprotocol/sdk/client/sse.js";
-import { McpServer } from "./types/McpServerTypes";
+import { McpServer } from "../types/McpServerTypes";
 
 interface Tool {
   name: string;

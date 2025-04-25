@@ -1,9 +1,9 @@
-import { MCPClientManager } from '../main/services/mcpClientManager';
-import { MCPClient } from '../main/services/mcpClient';
-import { McpServer } from '../main/types/McpServerTypes';
+import { MCPClientManager } from '../../../../src/main/services/mcpClientManager';
+import { MCPClient } from '../../../../src/main/services/mcpClient';
+import { McpServer } from '../../../../src/main/types/McpServerTypes';
 
 // Mock the MCPClient class
-jest.mock('../main/services/mcpClient');
+jest.mock('../../../../src/main/services/mcpClient');
 
 describe('MCPClientManager', () => {
   let clientManager: MCPClientManager;
@@ -198,7 +198,7 @@ describe('MCPClientManager', () => {
       
       // Create a map of server names to tool names for easier assertion
       const serverToolMap = new Map<string, string[]>();
-      clientsWithTools.forEach(({ serverName, toolNames }: { serverName: string, toolNames: string[] }) => {
+      clientsWithTools.forEach(({ serverName, toolNames }) => {
         serverToolMap.set(serverName, toolNames);
       });
       

@@ -2,7 +2,7 @@ import { app, BrowserWindow, ipcMain, dialog, session } from 'electron';
 import * as path from 'path';
 import * as fs from 'fs';
 import * as dotenv from 'dotenv';
-import { MCPClientManager } from './mcpClientManager';
+import { MCPClientManager } from './main/services/mcpClientManager';
 
 // 加载环境变量
 dotenv.config();
@@ -32,16 +32,14 @@ function createWindow() {
       contextIsolation: true,
       webSecurity: true, // Keep web security enabled
       allowRunningInsecureContent: false,
-      preload: path.join(__dirname, '../src/preload.js'),
+      preload: path.join(__dirname, 'preload.js'), // Updated path to preload.js
     }
   });
 
-
-
   // Load the index.html of the app (adjust path for production vs development)
   const indexPath = app.isPackaged 
-    ? path.join(__dirname, './index.html') // For packaged app
-    : path.join(__dirname, '../src/index.html'); // For development
+    ? path.join(__dirname, 'index.html') // For packaged app
+    : path.join(__dirname, 'index.html'); // For development
 
   mainWindow.loadFile(indexPath);
 
