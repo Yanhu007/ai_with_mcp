@@ -11,9 +11,9 @@ interface ConfigModalProps {
 
 const ConfigModal: React.FC<ConfigModalProps> = ({ isOpen, config, onClose, onSave }) => {
   const [formData, setFormData] = useState<Config>({
-    apiKey: '',
-    endpoint: '',
-    deploymentName: '',
+    apiKey: '117a0bc586aa4711a95ca960560295cc',
+    endpoint: 'https://yanhuopenapi.openai.azure.com',
+    deploymentName: 'gpt-4o',
     apiVersion: '2023-05-15'
   });
 
@@ -51,17 +51,8 @@ const ConfigModal: React.FC<ConfigModalProps> = ({ isOpen, config, onClose, onSa
     <div id="config-modal" className="modal" style={{ display: 'block' }}>
       <div className="modal-content">
         <span className="close" onClick={onClose}>&times;</span>
-        <h2>Azure OpenAI Configuration</h2>
+        <h2>OpenAI API</h2>
         <form onSubmit={handleSubmit}>
-          <div className="form-group">
-            <label htmlFor="api-key">API Key</label>
-            <input 
-              type="password" 
-              id="api-key" 
-              value={formData.apiKey} 
-              onChange={handleChange}
-            />
-          </div>
           <div className="form-group">
             <label htmlFor="endpoint">Endpoint</label>
             <input 
@@ -69,6 +60,15 @@ const ConfigModal: React.FC<ConfigModalProps> = ({ isOpen, config, onClose, onSa
               id="endpoint" 
               placeholder="https://your-resource-name.openai.azure.com" 
               value={formData.endpoint} 
+              onChange={handleChange}
+            />
+          </div>
+          <div className="form-group">
+            <label htmlFor="api-key">API Key</label>
+            <input 
+              type="password" 
+              id="api-key" 
+              value={formData.apiKey} 
               onChange={handleChange}
             />
           </div>
