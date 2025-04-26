@@ -17,8 +17,7 @@ class ChatApi {
     };
     this.systemMessages = [];
     this.systemMessageCallbacks = {
-      onAdd: null,
-      onRemove: null
+      onAdd: null
     };
   }
 
@@ -44,20 +43,6 @@ class ChatApi {
     if (this.systemMessageCallbacks.onAdd) {
       this.systemMessageCallbacks.onAdd(systemMsg);
     }
-    
-    // Clean up system message after a delay
-    setTimeout(() => {
-      // Remove from systemMessages array
-      const index = this.systemMessages.findIndex(msg => msg.id === systemMsg.id);
-      if (index !== -1) {
-        this.systemMessages.splice(index, 1);
-      }
-      
-      // Notify UI about removed system message
-      if (this.systemMessageCallbacks.onRemove) {
-        this.systemMessageCallbacks.onRemove(systemMsg);
-      }
-    }, 5000); // Remove after 5 seconds
     
     return systemMsg;
   }
@@ -351,7 +336,8 @@ class ChatApi {
         const assistantMessage = {
           role: "assistant",
           content: response.content || "",
-          tool_calls: response.tool_calls
+          tool_calls: response.tool_calls,
+          id: Date.now().toString() // Add timestamp-based ID
         };
         
         currentMessages.push(assistantMessage);
@@ -391,7 +377,8 @@ class ChatApi {
               role: "tool",
               tool_call_id: toolCall.id,
               name: toolCall.function.name,
-              content: JSON.stringify(toolResult)
+              content: JSON.stringify(toolResult),
+              id: Date.now().toString() // Add timestamp-based ID
             };
             
             currentMessages.push(toolResponse);
@@ -419,7 +406,8 @@ class ChatApi {
               role: "tool",
               tool_call_id: toolCall.id,
               name: toolCall.function.name,
-              content: JSON.stringify(errorResult)
+              content: JSON.stringify(errorResult),
+              id: Date.now().toString() // Add timestamp-based ID
             };
             
             currentMessages.push(errorResponse);
@@ -453,7 +441,8 @@ class ChatApi {
             (completeText) => {
               const finalMessage = {
                 role: "assistant",
-                content: completeText
+                content: completeText,
+                id: Date.now().toString() // Add timestamp-based ID
               };
               
               currentMessages.push(finalMessage);
@@ -468,7 +457,8 @@ class ChatApi {
           // 如果没有提供流式处理回调，使用默认方式处理
           const finalMessage = {
             role: "assistant",
-            content: response.content
+            content: response.content,
+            id: Date.now().toString() // Add timestamp-based ID
           };
           
           currentMessages.push(finalMessage);

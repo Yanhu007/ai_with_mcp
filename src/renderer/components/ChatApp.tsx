@@ -29,17 +29,13 @@ const ChatApp: React.FC = () => {
     chatApi.registerSystemMessageCallbacks({
       onAdd: (message: Message) => {
         setSystemMessages(prev => [...prev, message]);
-      },
-      onRemove: (message: Message) => {
-        setSystemMessages(prev => prev.filter(msg => msg.id !== message.id));
       }
     });
     
     // Cleanup on unmount
     return () => {
       chatApi.registerSystemMessageCallbacks({
-        onAdd: undefined,
-        onRemove: undefined
+        onAdd: undefined
       });
     };
   }, []);
@@ -75,12 +71,18 @@ const ChatApp: React.FC = () => {
     }
   };
 
-  // Combine chat history and system messages for display, filtering to show only user messages
-  // and assistant messages without tool_calls
-  const displayMessages = [...chatHistory, ...systemMessages].filter(message => {
-    return message.role === 'user' || 
-           (message.role === 'assistant' && !message.tool_calls);
-  });
+  // Filter and combine chat history and system messages for display, and sort by timestamp-based ID
+  const displayMessages = [...chatHistory, ...systemMessages]
+    .filter(message => 
+      message.role === 'user' || 
+      message.role === 'system' || 
+      (message.role === 'assistant' && !message.tool_calls)
+    )
+    .sort((a, b) => {
+      const aTime = a.id ? parseInt(a.id) : 0;
+      const bTime = b.id ? parseInt(b.id) : 0;
+      return aTime - bTime; // Sort from oldest to newest
+    });
 
   const sendMessage = async (userMessage: string) => {
     if (!userMessage.trim()) return;
@@ -93,7 +95,11 @@ const ChatApp: React.FC = () => {
     }
 
     // Add user message to chat history
-    const userMsg: Message = { role: 'user', content: userMessage };
+    const userMsg: Message = { 
+      role: 'user', 
+      content: userMessage,
+      id: Date.now().toString() // Add timestamp-based ID
+    };
     const updatedHistory: Message[] = [...chatHistory, userMsg];
     setChatHistory(updatedHistory);
     
@@ -109,7 +115,7 @@ const ChatApp: React.FC = () => {
         const tempMsg: Message = { 
           role: 'assistant', 
           content: '', 
-          id: 'streaming-' + Date.now() 
+          id: (Date.now()+1).toString() // Use a different ID to avoid collision with user message 
         };
         // Ensure id is a string before assigning
         streamingMsgId = tempMsg.id || null;
@@ -149,9 +155,10 @@ const ChatApp: React.FC = () => {
                 // Hide loading indicator
                 setIsLoading(false);
                 tempMsgAdded = true;
+                tempMsg.id = Date.now().toString(); // Update ID to current timestamp
                 
-                // Add the temporary message to chat history
-                setChatHistory(prev => [...prev, { ...tempMsg, content: chunkText }]);
+                // Add the temporary message to chat history.
+                setChatHistory(prev => [...prev, { ...tempMsg, content: chunkText}]);
               } else {
                 // Update temporary message content with each subsequent chunk
                 setChatHistory(prev => 
@@ -172,7 +179,7 @@ const ChatApp: React.FC = () => {
         const tempMsg: Message = { 
           role: 'assistant', 
           content: '', 
-          id: 'streaming-' + Date.now() 
+          id: (Date.now()+1).toString() // Use a different ID to avoid collision with user message 
         };
         // Ensure id is a string before assigning
         streamingMsgId = tempMsg.id || null;
@@ -192,9 +199,10 @@ const ChatApp: React.FC = () => {
                 // Hide loading indicator
                 setIsLoading(false);
                 tempMsgAdded = true;
+                tempMsg.id = Date.now().toString(); // Update ID to current timestamp
                 
-                // Add the temporary message to chat history
-                setChatHistory(prev => [...prev, { ...tempMsg, content: responseText }]);
+                // Add the temporary message to chat history and update the id with the timestamp.
+                setChatHistory(prev => [...prev, { ...tempMsg, content: responseText}]);
               } else {
                 // Update temporary message content with each subsequent chunk
                 setChatHistory(prev => 
@@ -222,7 +230,8 @@ const ChatApp: React.FC = () => {
           
         const errorMsg: Message = { 
           role: 'assistant', 
-          content: `Error: ${error instanceof Error ? error.message : String(error)}` 
+          content: `Error: ${error instanceof Error ? error.message : String(error)}`,
+          id: Date.now().toString() // Add timestamp-based ID 
         };
         return [...filtered, errorMsg];
       });
