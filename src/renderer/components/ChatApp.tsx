@@ -1,9 +1,9 @@
 // ChatApp.tsx - Main container component for the chat application
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import ChatHeader from './ChatHeader';
 import ChatContainer from './ChatContainer';
 import ChatInput from './ChatInput';
-import ConfigModal from './ConfigModal';
+import ModelConfigSidepane from './ModelConfigSidepane';
 import { Config, Message } from '../types/ChatTypes';
 import chatApi from '../api/chatApi.js';
 
@@ -19,6 +19,14 @@ const ChatApp: React.FC = () => {
   });
   const [showConfigModal, setShowConfigModal] = useState<boolean>(false);
   const [hasTools, setHasTools] = useState<boolean>(false);
+  
+  // Add state for sidepane width
+  const [sidepaneWidth, setSidepaneWidth] = useState<number>(350);
+  
+  // Add refs for drag functionality
+  const isDraggingRef = useRef<boolean>(false);
+  const startXRef = useRef<number>(0);
+  const resizeHandleRef = useRef<HTMLDivElement>(null);
 
   // Initialize on mount
   useEffect(() => {
@@ -32,11 +40,53 @@ const ChatApp: React.FC = () => {
       }
     });
     
+    // Setup resizing event listeners
+    const handleMouseDown = (e: MouseEvent) => {
+      isDraggingRef.current = true;
+      startXRef.current = e.clientX;
+      document.body.style.cursor = 'ew-resize';
+      document.body.style.userSelect = 'none';
+      e.preventDefault();
+    };
+
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!isDraggingRef.current) return;
+      
+      // Calculate the new width based on the mouse position
+      const containerRect = document.querySelector('.container')?.getBoundingClientRect();
+      if (!containerRect) return;
+      
+      // Calculate width from right edge of screen
+      const newWidth = Math.max(250, Math.min(600, containerRect.right - e.clientX));
+      setSidepaneWidth(newWidth);
+    };
+
+    const handleMouseUp = () => {
+      isDraggingRef.current = false;
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+    };
+    
+    // Add event listeners for drag resize
+    const resizeHandle = resizeHandleRef.current;
+    if (resizeHandle) {
+      resizeHandle.addEventListener('mousedown', handleMouseDown);
+    }
+    
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+    
     // Cleanup on unmount
     return () => {
       chatApi.registerSystemMessageCallbacks({
         onAdd: undefined
       });
+      
+      if (resizeHandle) {
+        resizeHandle.removeEventListener('mousedown', handleMouseDown);
+      }
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
     };
   }, []);
 
@@ -244,25 +294,50 @@ const ChatApp: React.FC = () => {
   return (
     <div className="container">
       <ChatHeader 
-        onConfigClick={() => setShowConfigModal(true)} 
+        onConfigClick={() => setShowConfigModal(!showConfigModal)} 
       />
       
-      <ChatContainer 
-        messages={displayMessages} 
-        isLoading={isLoading} 
-      />
-      
-      <ChatInput 
-        onSendMessage={sendMessage} 
-        disabled={isLoading} 
-      />
-      
-      <ConfigModal 
-        isOpen={showConfigModal}
-        config={config}
-        onClose={() => setShowConfigModal(false)}
-        onSave={saveConfig}
-      />
+      <div className="main-content">
+        <div className="chat-area" style={{ flex: 1 }}>
+          <ChatContainer 
+            messages={displayMessages} 
+            isLoading={isLoading} 
+          />
+          
+          <ChatInput 
+            onSendMessage={sendMessage} 
+            disabled={isLoading} 
+          />
+        </div>
+        
+        {showConfigModal && (
+          <>
+            <div 
+              ref={resizeHandleRef}
+              className="resize-handle"
+              style={{ 
+                left: 'auto', 
+                right: `${sidepaneWidth}px`,
+                width: '6px',
+                height: '100%',
+                cursor: 'ew-resize',
+                position: 'absolute',
+                zIndex: 20
+              }}
+              title="Drag to resize"
+            ></div>
+            
+            <ModelConfigSidepane 
+              isOpen={showConfigModal}
+              config={config}
+              onClose={() => setShowConfigModal(false)}
+              onSave={saveConfig}
+              width={sidepaneWidth}
+              setWidth={setSidepaneWidth}
+            />
+          </>
+        )}
+      </div>
     </div>
   );
 };
