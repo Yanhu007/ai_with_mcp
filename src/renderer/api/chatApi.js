@@ -128,58 +128,68 @@ class ChatApi {
     }
   }
 
-  // Stream chat completion from Azure OpenAI API - 使用 Azure AI Inference SDK 和 SSE 流处理
+  // Stream chat completion from Azure OpenAI API - 使用 Fetch API 和原生 ReadableStream
   async streamChatCompletion(messages, onChunk, onComplete) {
     try {
-      // 创建 Azure OpenAI 客户端
-      const endpoint = `${this.config.endpoint}/openai/deployments/${this.config.deploymentName}`;
-      const client = new ModelClient(endpoint, new AzureKeyCredential(this.config.apiKey));
-
+      // 构造 Azure OpenAI API URL
+      const apiUrl = `${this.config.endpoint}/openai/deployments/${this.config.deploymentName}/chat/completions?api-version=${this.config.apiVersion}`;
+      
       // 发送请求并获取流式响应
-      const response = await client.path("/chat/completions").post({
-        body: {
+      const response = await fetch(apiUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'api-key': this.config.apiKey
+        },
+        body: JSON.stringify({
           messages: messages,
           max_tokens: 4096,
           temperature: 0.7,
           top_p: 1,
           model: this.config.deploymentName,
           stream: true
-        }
-      }).asNodeStream();
-
-      // 获取响应流
-      const stream = response.body;
-      if (!stream) {
-        throw new Error("The response stream is undefined");
-      }
+        })
+      });
 
       // 检查请求是否成功
-      if (response.status !== "200") {
-        stream.destroy();
-        throw new Error(`Failed to get chat completions, http operation failed with ${response.status} code`);
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Failed to get chat completions: ${response.status} - ${errorText}`);
       }
 
-      // 创建 SSE 流
-      const sseStream = createSseStream(stream);
+      // 获取响应流
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder('utf-8');
       let responseText = '';
 
-      // 处理 SSE 流中的每个事件
-      for await (const event of sseStream) {
-        if (event.data === "[DONE]") {
-          break;
-        }
-
-        try {
-          const jsonData = JSON.parse(event.data);
-          for (const choice of jsonData.choices) {
-            if (choice.delta?.content) {
-              responseText += choice.delta.content;
-              // 回调每个文本块
-              if (onChunk) onChunk(responseText);
+      // 处理流式响应
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        
+        // 解码二进制数据
+        const chunk = decoder.decode(value, { stream: true });
+        
+        // 处理 SSE 格式 (data: {...})
+        const lines = chunk.split('\n').filter(line => 
+          line.trim() !== '' && line.trim() !== 'data: [DONE]'
+        );
+        
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            try {
+              const jsonData = JSON.parse(line.substring(6));
+              if (jsonData.choices && jsonData.choices[0]?.delta?.content) {
+                const content = jsonData.choices[0].delta.content;
+                responseText += content;
+                
+                // 回调每个文本块
+                if (onChunk) onChunk(responseText);
+              }
+            } catch (e) {
+              console.warn('Error parsing JSON:', e, line);
             }
           }
-        } catch (e) {
-          console.warn('Error parsing JSON:', e, event.data);
         }
       }
 
@@ -219,8 +229,8 @@ class ChatApi {
         throw new Error(`Failed to get chat completions, http operation failed with ${response.status} code`);
       }
 
-      // 解析响应
-      const result = await response.body.json();
+      // 解析响应 - 修复: 使用 response.body 而不是 response.body.json()
+      const result = await response.body;
       
       // 返回消息内容
       return result.choices[0].message;
@@ -230,7 +240,7 @@ class ChatApi {
     }
   }
 
-  // 使用 Stream 方式输出最终结果 - 仅在最后一次对话时使用
+  // 使用 fetch API 流式输出最终结果 - 仅在最后一次对话时使用
   async streamFinalResponse(messages, onChunk, onComplete) {
     return this.streamChatCompletion(messages, onChunk, onComplete);
   }

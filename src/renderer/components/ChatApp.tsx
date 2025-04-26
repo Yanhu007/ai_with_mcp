@@ -75,8 +75,12 @@ const ChatApp: React.FC = () => {
     }
   };
 
-  // Combine chat history and system messages for display
-  const displayMessages = [...chatHistory, ...systemMessages];
+  // Combine chat history and system messages for display, filtering to show only user messages
+  // and assistant messages without tool_calls
+  const displayMessages = [...chatHistory, ...systemMessages].filter(message => {
+    return message.role === 'user' || 
+           (message.role === 'assistant' && !message.tool_calls);
+  });
 
   const sendMessage = async (userMessage: string) => {
     if (!userMessage.trim()) return;
@@ -96,101 +100,126 @@ const ChatApp: React.FC = () => {
     // Start loading state
     setIsLoading(true);
     
+    // Track streaming state to handle errors properly
+    let streamingMsgId: string | null = null;
+    
     try {
       if (hasTools) {
-        // 创建一个临时的消息占位符用于流式更新
+        // Create a temporary message placeholder for streaming updates
         const tempMsg: Message = { 
           role: 'assistant', 
           content: '', 
           id: 'streaming-' + Date.now() 
         };
+        // Ensure id is a string before assigning
+        streamingMsgId = tempMsg.id || null;
         
-        // 添加临时消息到聊天历史中
-        setChatHistory(prev => [...prev, tempMsg]);
+        // Track if we've added the temporary message to avoid React state closure issues
+        let tempMsgAdded = false;
         
-        // 使用 MCP 工具处理对话 - 回调会添加消息到聊天历史中
+        // Use MCP tools to process conversation - callbacks will add messages to chat history
         await chatApi.processConversationWithMCP(updatedHistory, {
           onAssistantMessage: (message: Message) => {
-            // 只处理非最终回应的消息（中间工具调用结果）
-            if (message.tool_calls) {
+            // 添加助手消息到历史记录，该消息是工具识别消息，所以内容可能为空
+            if (message.tool_calls) {          
               setChatHistory(prev => {
-                // 移除流式占位符消息
-                const filtered = prev.filter(m => m.id !== tempMsg.id);
-                return [...filtered, message];
+                // Add the message to history
+                return [...prev, message];
               });
             }
           },
           
           onToolUse: (toolName: string) => {
-            // 工具使用通知由 chatApi.addUISystemMessage 处理
-            // 这会触发已注册的回调
+            // Tool use notifications are handled by chatApi.addUISystemMessage
+            // which will trigger registered callbacks
           },
           
           onToolResult: (message: Message) => {
             setChatHistory(prev => {
-              // 修复: 不再使用map和find组合，改用简单的数组扩展
-              const filteredMessages = prev.filter(m => m.id !== tempMsg.id);
-              return [...filteredMessages, message];
+              return [...prev, message];
             });
           },
           
-          // 添加流式输出回调处理最终响应
+          // Add streaming output callback to handle final response
           onFinalResponseChunk: (chunkText: string) => {
-            // 实时更新临时消息的内容
-            setChatHistory(prev => 
-              prev.map(m => 
-                (m.id === tempMsg.id) 
-                  ? { ...m, content: chunkText } 
-                  : m
-              )
-            );
+            // Only process if we have content
+            if (chunkText) {
+              // If this is the first chunk with content
+              if (!tempMsgAdded) {
+                // Hide loading indicator
+                setIsLoading(false);
+                tempMsgAdded = true;
+                
+                // Add the temporary message to chat history
+                setChatHistory(prev => [...prev, { ...tempMsg, content: chunkText }]);
+              } else {
+                // Update temporary message content with each subsequent chunk
+                setChatHistory(prev => 
+                  prev.map(m => 
+                    (m.id === tempMsg.id) 
+                      ? { ...m, content: chunkText } 
+                      : m
+                  )
+                );
+              }
+            }
           }
         });
         
-        // 当流式输出完毕后，最终的消息已通过 onAssistantMessage 添加到历史记录中
-        // 需要移除临时占位符消息
-        setChatHistory(prev => prev.filter(m => m.id !== tempMsg.id));
+        streamingMsgId = null;
       } else {
-        // 非工具流 - 创建临时消息用于流式更新
+        // Non-tool flow - create temporary message for streaming updates
         const tempMsg: Message = { 
           role: 'assistant', 
           content: '', 
           id: 'streaming-' + Date.now() 
         };
+        // Ensure id is a string before assigning
+        streamingMsgId = tempMsg.id || null;
         
-        // 添加临时消息到聊天历史中
-        setChatHistory(prev => [...prev, tempMsg]);
+        // Track if we've added the temporary message to avoid React state closure issues
+        let tempMsgAdded = false;
         
-        // 流式完成
+        // Stream chat completion
         await chatApi.streamChatCompletion(
           updatedHistory,
-          // 更新临时消息的内容
+          // Update temporary message content
           (responseText: string) => {
-            setChatHistory(prev => 
-              prev.map(m => 
-                (m.id === tempMsg.id) 
-                  ? { ...m, content: responseText } 
-                  : m
-              )
-            );
-          },
-          // 完成时，将临时消息替换为最终消息
-          (finalResponse: string) => {
-            setChatHistory(prev => {
-              const filtered = prev.filter(m => m.id !== tempMsg.id);
-              const assistantMsg: Message = { role: 'assistant', content: finalResponse };
-              return [...filtered, assistantMsg];
-            });
+            // Only process if we have content
+            if (responseText) {
+              // If this is the first chunk with content
+              if (!tempMsgAdded) {
+                // Hide loading indicator
+                setIsLoading(false);
+                tempMsgAdded = true;
+                
+                // Add the temporary message to chat history
+                setChatHistory(prev => [...prev, { ...tempMsg, content: responseText }]);
+              } else {
+                // Update temporary message content with each subsequent chunk
+                setChatHistory(prev => 
+                  prev.map(m => 
+                    (m.id === tempMsg.id) 
+                      ? { ...m, content: responseText } 
+                      : m
+                  )
+                );
+              }
+            }
           }
         );
+        streamingMsgId = null;
       }
     } catch (error) {
       console.error('Error in sendMessage:', error);
       
-      // 添加错误消息
+      // Add error message
       setChatHistory(prev => {
-        // 过滤掉任何临时消息
-        const filtered = prev.filter(m => !m.id?.startsWith('streaming-'));
+        // Filter out any temporary messages, using saved ID
+        const filtered = streamingMsgId 
+          ? prev.filter(m => m.id !== streamingMsgId) 
+          : prev.filter(m => !m.id?.startsWith('streaming-'));
+          
         const errorMsg: Message = { 
           role: 'assistant', 
           content: `Error: ${error instanceof Error ? error.message : String(error)}` 
@@ -199,6 +228,7 @@ const ChatApp: React.FC = () => {
       });
     } finally {
       setIsLoading(false);
+      streamingMsgId = null;
     }
   };
 
