@@ -25,7 +25,7 @@ const ChatContainer: React.FC<ChatContainerProps> = ({ messages, isLoading }) =>
       ))}
       
       {isLoading && (
-        <div className="message assistant-message">
+        <div className="message assistant-message loading-message">
           <div className="typing-indicator">
             <div className="dots">
               <span></span>

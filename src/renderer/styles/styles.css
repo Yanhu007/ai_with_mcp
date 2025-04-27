@@ -241,6 +241,12 @@ h2 {
   color: #0a0a0a;
 }
 
+.loading-message {
+  width: auto;
+  max-width: fit-content;
+  margin-right: auto;
+}
+
 .system-message {
   background-color: #fafafa;
   color: #666;
@@ -313,6 +319,23 @@ code {
 pre {
   margin: 0;
   white-space: pre-wrap;
+}
+
+/* 处理Markdown生成的列表样式 */
+.message-content ol {
+  padding-left: 1.5rem;
+  margin: 0.5rem 0;
+}
+
+.message-content ol > li {
+  position: relative;
+  margin-bottom: 0.25rem;
+}
+
+/* 处理自带序号的文字，将原始序号隐藏 */
+.message-content ol > li::marker {
+  color: transparent;
+  position: absolute;
 }
 
 .typing-indicator {
