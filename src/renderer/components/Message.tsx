@@ -62,7 +62,7 @@ const Message: React.FC<MessageProps> = ({ message }) => {
       case 'assistant':
         return 'assistant-message';
       case 'system':
-        return 'system-message assistant-message';
+        return 'system-message';
       case 'tool':
         return 'tool-message assistant-message';
       default:

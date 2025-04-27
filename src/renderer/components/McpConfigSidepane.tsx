@@ -1,0 +1,231 @@
+// McpConfigSidepane.tsx - Sidepane for MCP Servers Configuration
+import React, { useState, useEffect, useRef } from 'react';
+const ipcRenderer = typeof window !== 'undefined' && window?.electron?.ipcRenderer;
+
+interface McpServer {
+  serverName: string;
+  isConnected: boolean;
+  availableTools: string[];
+}
+
+interface McpConfigSidepaneProps {
+  isOpen: boolean;
+  onClose: () => void;
+  width?: number;
+  setWidth?: (width: number) => void;
+}
+
+const McpConfigSidepane: React.FC<McpConfigSidepaneProps> = ({ 
+  isOpen, 
+  onClose, 
+  width: initialWidth = 350, 
+  setWidth 
+}) => {
+  const [mcpServers, setMcpServers] = useState<McpServer[]>([]);
+  const [loading, setLoading] = useState(true);
+  
+  const resizeHandleRef = useRef<HTMLDivElement>(null);
+  const sidepaneRef = useRef<HTMLDivElement>(null);
+  const isDraggingRef = useRef<boolean>(false);
+  const startXRef = useRef<number>(0);
+  const startWidthRef = useRef<number>(0);
+
+  // Load MCP servers data
+  useEffect(() => {
+    const fetchMcpServers = async () => {
+      try {
+        setLoading(true);
+        // Get all servers with their tools
+        // Check if window.electron.ipcRenderer exists before using it
+        if (!window.electron?.ipcRenderer) {
+          console.error('window.electron.ipcRenderer is not available');
+          return;
+        }
+        
+        const clientsWithTools = await window.electron.ipcRenderer.invoke('get-mcp-clients-with-tools');
+        
+        // Format the data
+        const serversData = clientsWithTools.map((client: any) => ({
+          serverName: client.serverName,
+          isConnected: client.toolNames.length > 0, // If has tools, it's connected
+          availableTools: client.toolNames
+        }));
+        
+        setMcpServers(serversData);
+      } catch (error) {
+        console.error('Error fetching MCP servers:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    if (isOpen) {
+      fetchMcpServers();
+    }
+  }, [isOpen]);
+
+  // Setup resize functionality
+  useEffect(() => {
+    const handleMouseDown = (e: MouseEvent) => {
+      isDraggingRef.current = true;
+      startXRef.current = e.clientX;
+      startWidthRef.current = initialWidth;
+      document.body.style.cursor = 'ew-resize';
+      document.body.style.userSelect = 'none';
+      // Prevent other events from firing while resizing
+      e.preventDefault();
+      e.stopPropagation();
+    };
+
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!isDraggingRef.current) return;
+      const delta = startXRef.current - e.clientX;
+      // For left-aligned sidepane, increasing width when drag moves left
+      const newWidth = Math.max(250, Math.min(600, startWidthRef.current + delta));
+      if (setWidth) {
+        setWidth(newWidth);
+      }
+    };
+
+    const handleMouseUp = () => {
+      isDraggingRef.current = false;
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+    };
+
+    const resizeHandle = resizeHandleRef.current;
+    
+    if (resizeHandle) {
+      resizeHandle.addEventListener('mousedown', handleMouseDown);
+    }
+    
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+
+    return () => {
+      if (resizeHandle) {
+        resizeHandle.removeEventListener('mousedown', handleMouseDown);
+      }
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [initialWidth, setWidth]);
+
+  // Handle refresh connection for a server
+  const handleRefreshServer = (serverName: string) => {
+    // This is a placeholder - functionality will be implemented later
+    console.log(`Refresh server: ${serverName}`);
+  };
+
+  // Handle disable/enable server
+  const handleToggleServerStatus = (serverName: string) => {
+    // This is a placeholder - functionality will be implemented later
+    console.log(`Toggle server status: ${serverName}`);
+  };
+
+  // Handle edit server
+  const handleEditServer = (serverName: string) => {
+    // This is a placeholder - functionality will be implemented later
+    console.log(`Edit server: ${serverName}`);
+  };
+
+  // Handle delete server
+  const handleDeleteServer = (serverName: string) => {
+    // This is a placeholder - functionality will be implemented later
+    console.log(`Delete server: ${serverName}`);
+  };
+
+  if (!isOpen) return null;
+
+  return (
+    <div 
+      ref={sidepaneRef} 
+      className="config-sidepane" 
+      style={{ width: `${initialWidth}px` }}
+    >
+      <div className="sidepane-header">
+        <h2>MCP Servers</h2>
+        <button className="close-btn" onClick={onClose}>&times;</button>
+      </div>
+      
+      <div className="sidepane-content">
+        {loading ? (
+          <div className="loading-indicator">Loading MCP servers...</div>
+        ) : mcpServers.length > 0 ? (
+          <div className="server-cards">
+            {mcpServers.map((server) => (
+              <div key={server.serverName} className="server-card">
+                <div className="server-card-header">
+                  <div className="server-info">
+                    <span 
+                      className={`status-indicator ${server.isConnected ? 'connected' : 'disconnected'}`} 
+                      title={server.isConnected ? 'Connected' : 'Disconnected'}
+                    ></span>
+                    <h3 className="server-name">{server.serverName}</h3>
+                  </div>
+                  <div className="server-actions">
+                    <button 
+                      className="action-btn" 
+                      onClick={() => handleRefreshServer(server.serverName)}
+                      title="Refresh Connection"
+                    >
+                      🔄
+                    </button>
+                    <button 
+                      className="action-btn" 
+                      onClick={() => handleToggleServerStatus(server.serverName)}
+                      title={server.isConnected ? "Disable" : "Enable"}
+                    >
+                      {server.isConnected ? '✅' : '❌'}
+                    </button>
+                    <button 
+                      className="action-btn" 
+                      onClick={() => handleEditServer(server.serverName)}
+                      title="Edit Server"
+                    >
+                      ✏️
+                    </button>
+                    <button 
+                      className="action-btn" 
+                      onClick={() => handleDeleteServer(server.serverName)}
+                      title="Delete Server"
+                    >
+                      🗑️
+                    </button>
+                  </div>
+                </div>
+                
+                <div className="server-card-content">
+                  <h4>Available Tools ({server.availableTools.length})</h4>
+                  {server.availableTools.length > 0 ? (
+                    <div className="tools-container">
+                      {server.availableTools.map((tool) => (
+                        <div className="tool-chip" key={tool} title={tool}>
+                          <span className="tool-name">{tool}</span>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="no-tools">No tools available</p>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="empty-state">
+            <p>No MCP servers configured</p>
+          </div>
+        )}
+      </div>
+      
+      <div 
+        ref={resizeHandleRef} 
+        className="resize-handle"
+        title="Drag to resize"
+      ></div>
+    </div>
+  );
+};
+
+export default McpConfigSidepane;

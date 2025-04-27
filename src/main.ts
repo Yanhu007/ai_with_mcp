@@ -131,6 +131,21 @@ ipcMain.handle('get-mcp-client-manager', async () => {
   return mcpClientManager !== null;
 });
 
+ipcMain.handle('get-mcp-clients-with-tools', async () => {
+  if (!mcpClientManager) {
+    console.log('MCP Client Manager not initialized when requesting clients');
+    return [];
+  }
+  
+  try {
+    const clientsWithTools = mcpClientManager.getAllClientsWithTools();
+    return clientsWithTools;
+  } catch (error) {
+    console.error('Error getting MCP clients with tools:', error);
+    return [];
+  }
+});
+
 ipcMain.handle('get-all-mcp-tools', async () => {
   if (!mcpClientManager) {
     console.log('MCP Client Manager not initialized when requesting tools');

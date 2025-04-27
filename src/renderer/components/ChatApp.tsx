@@ -4,6 +4,7 @@ import ChatHeader from './ChatHeader';
 import ChatContainer from './ChatContainer';
 import ChatInput from './ChatInput';
 import ModelConfigSidepane from './ModelConfigSidepane';
+import McpConfigSidepane from './McpConfigSidepane';
 import { Config, Message } from '../types/ChatTypes';
 import chatApi from '../api/chatApi.js';
 
@@ -18,6 +19,7 @@ const ChatApp: React.FC = () => {
     apiVersion: '2023-05-15'
   });
   const [showConfigModal, setShowConfigModal] = useState<boolean>(false);
+  const [showMcpConfigModal, setShowMcpConfigModal] = useState<boolean>(false);
   const [hasTools, setHasTools] = useState<boolean>(false);
   
   // Add state for sidepane width
@@ -119,6 +121,19 @@ const ChatApp: React.FC = () => {
     } catch (error) {
       console.error('Failed to initialize MCP Client Manager:', error);
     }
+  };
+  
+  // Handle clicks for sidepane toggles
+  const handleConfigClick = () => {
+    setShowConfigModal(!showConfigModal);
+    // Close the MCP config panel if open
+    if (showMcpConfigModal) setShowMcpConfigModal(false);
+  };
+  
+  const handleMcpConfigClick = () => {
+    setShowMcpConfigModal(!showMcpConfigModal);
+    // Close the API config panel if open
+    if (showConfigModal) setShowConfigModal(false);
   };
 
   // Filter and combine chat history and system messages for display, and sort by timestamp-based ID
@@ -291,14 +306,48 @@ const ChatApp: React.FC = () => {
     }
   };
 
+  // Current active sidepane
+  const getActiveSidepane = () => {
+    if (showConfigModal) {
+      return (
+        <ModelConfigSidepane 
+          isOpen={showConfigModal}
+          config={config}
+          onClose={() => setShowConfigModal(false)}
+          onSave={saveConfig}
+          width={sidepaneWidth}
+          setWidth={setSidepaneWidth}
+        />
+      );
+    } else if (showMcpConfigModal) {
+      return (
+        <McpConfigSidepane 
+          isOpen={showMcpConfigModal}
+          onClose={() => setShowMcpConfigModal(false)}
+          width={sidepaneWidth}
+          setWidth={setSidepaneWidth}
+        />
+      );
+    }
+    return null;
+  };
+
   return (
     <div className="container">
       <ChatHeader 
-        onConfigClick={() => setShowConfigModal(!showConfigModal)} 
+        onConfigClick={handleConfigClick}
+        onMcpConfigClick={handleMcpConfigClick}
       />
       
       <div className="main-content">
-        <div className="chat-area" style={{ flex: 1 }}>
+        <div 
+          className="chat-area" 
+          style={{ 
+            flex: 1, 
+            maxWidth: (showConfigModal || showMcpConfigModal) ? `calc(100% - ${sidepaneWidth}px)` : '100%',
+            transition: 'max-width 0.15s ease-in-out'
+          }}
+        >
           <ChatContainer 
             messages={displayMessages} 
             isLoading={isLoading} 
@@ -310,7 +359,7 @@ const ChatApp: React.FC = () => {
           />
         </div>
         
-        {showConfigModal && (
+        {(showConfigModal || showMcpConfigModal) && (
           <>
             <div 
               ref={resizeHandleRef}
@@ -327,14 +376,7 @@ const ChatApp: React.FC = () => {
               title="Drag to resize"
             ></div>
             
-            <ModelConfigSidepane 
-              isOpen={showConfigModal}
-              config={config}
-              onClose={() => setShowConfigModal(false)}
-              onSave={saveConfig}
-              width={sidepaneWidth}
-              setWidth={setSidepaneWidth}
-            />
+            {getActiveSidepane()}
           </>
         )}
       </div>
