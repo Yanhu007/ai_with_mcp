@@ -22,9 +22,13 @@ const Message: React.FC<MessageProps> = ({ message }) => {
             code(code: string, language: string) {
               const validLanguage = language && hljs.getLanguage(language) ? language : 'plaintext';
               try {
-                return `<pre><code class="hljs language-${validLanguage}">${
-                  hljs.highlight(code, { language: validLanguage }).value
-                }</code></pre>`;
+                // Make sure to disable line numbers in the highlight.js configuration
+                const highlightedCode = hljs.highlight(code, { 
+                  language: validLanguage
+                }).value;
+                
+                // Return code without line numbers
+                return `<pre><code class="hljs language-${validLanguage}">${highlightedCode}</code></pre>`;
               } catch (err) {
                 console.error('Highlight.js error:', err);
                 return `<pre><code>${code}</code></pre>`;
