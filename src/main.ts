@@ -131,6 +131,25 @@ ipcMain.handle('get-mcp-client-manager', async () => {
   return mcpClientManager !== null;
 });
 
+ipcMain.handle('add-mcp-server', async (event, serverConfig) => {
+  if (!mcpClientManager) {
+    console.log('MCP Client Manager not initialized, trying to initialize now');
+    await initMcpClientManager();
+    
+    if (!mcpClientManager) {
+      throw new Error('Failed to initialize MCP Client Manager');
+    }
+  }
+  
+  try {
+    const serverName = await mcpClientManager.addServer(serverConfig);
+    return { success: true, serverName };
+  } catch (error) {
+    console.error('Error adding MCP server:', error);
+    return { success: false, error: (error as Error).message };
+  }
+});
+
 ipcMain.handle('get-mcp-clients-with-tools', async () => {
   if (!mcpClientManager) {
     console.log('MCP Client Manager not initialized when requesting clients');

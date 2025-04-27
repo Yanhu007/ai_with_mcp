@@ -16,6 +16,7 @@ interface McpConfigFile {
 export class MCPClientManager {
   private mcpClients: Map<string, MCPClient> = new Map();
   private toolToClientMap: Map<string, MCPClient> = new Map();
+  private configPath: string = path.join(__dirname, '../../../resources/mcp.json');
   
   /**
    * Initialize the MCPClientManager by loading MCP server configurations
@@ -77,6 +78,94 @@ export class MCPClientManager {
       }
     } catch (error) {
       console.error('Error initializing MCPClientManager:', error);
+      throw error;
+    }
+  }
+  
+  /**
+   * Add a new MCP server to the configuration file and create a client instance
+   * 
+   * @param serverConfig - Configuration for the new server
+   * @returns A promise that resolves to the server name if successful, or rejects with an error
+   */
+  async addServer(serverConfig: McpConfigFile): Promise<string> {
+    try {
+      // Validate the server configuration
+      if (!serverConfig.mcpServers || Object.keys(serverConfig.mcpServers).length === 0) {
+        throw new Error('Invalid server configuration: mcpServers is missing or empty');
+      }
+      
+      const [[serverName, config]] = Object.entries(serverConfig.mcpServers);
+      
+      if (!serverName) {
+        throw new Error('Invalid server configuration: server name is missing');
+      }
+      
+      if (this.mcpClients.has(serverName)) {
+        throw new Error(`Server with name "${serverName}" already exists`);
+      }
+      
+      if (!config.command && !config.url) {
+        throw new Error('Invalid server configuration: either command or url must be provided');
+      }
+      
+      // Read existing configuration
+      let existingConfig: McpConfigFile;
+      try {
+        const configData = await fs.promises.readFile(this.configPath, 'utf-8');
+        existingConfig = JSON.parse(configData);
+      } catch (error) {
+        // If the file doesn't exist or is invalid, create a new config
+        existingConfig = { mcpServers: {} };
+      }
+      
+      // Add the new server to the configuration
+      existingConfig.mcpServers[serverName] = config;
+      
+      // Write the updated configuration to the file
+      await fs.promises.writeFile(
+        this.configPath,
+        JSON.stringify(existingConfig, null, 2),
+        'utf-8'
+      );
+      
+      // Create and initialize the new MCPClient
+      const mcpServer: McpServer = {
+        name: serverName,
+        transport: config.url ? 'sse' : 'stdio',
+        command: config.command || '',
+        args: config.args || [],
+        serverLink: config.url || ''
+      };
+      
+      const client = new MCPClient(mcpServer);
+      
+      // Store the client in the map
+      this.mcpClients.set(serverName, client);
+      
+      // Try to connect to the server and get tools
+      try {
+        const result = await client.connectToServer();
+        if (result === 'connected') {
+          const tools = await client.getTools();
+          
+          // Create mappings from tool names to this client
+          tools.forEach(tool => {
+            this.toolToClientMap.set(tool.name, client);
+          });
+          
+          console.log(`Client ${serverName} initialized successfully with ${tools.length} tools.`);
+        } else if (result instanceof Error) {
+          console.error(`Failed to connect to server ${serverName}:`, result.message);
+          // Keep the client in the map even if initial connection failed
+        }
+      } catch (error) {
+        console.error(`Error initializing MCPClient for server ${serverName}:`, error);
+      }
+      
+      return serverName;
+    } catch (error) {
+      console.error('Error adding server:', error);
       throw error;
     }
   }

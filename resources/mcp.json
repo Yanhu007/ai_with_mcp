@@ -23,6 +23,15 @@
     },
     "Demo-SSE": {
       "url": "http://0.0.0.0:8000/sse"
+    },
+    "filesystem": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-filesystem",
+        "C:\\Users\\87191\\Desktop",
+        "C:\\Users\\87191\\Downloads"
+      ]
     }
   }
 }
