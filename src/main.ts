@@ -131,6 +131,73 @@ ipcMain.handle('get-mcp-client-manager', async () => {
   return mcpClientManager !== null;
 });
 
+ipcMain.handle('get-server-config', async (event, serverName) => {
+  if (!mcpClientManager) {
+    throw new Error('MCP Client Manager not initialized');
+  }
+  
+  try {
+    // Get the current configuration from the config file
+    const configPath = mcpClientManager.getConfigPath();
+    const configData = await fs.promises.readFile(configPath, 'utf-8');
+    const config = JSON.parse(configData);
+    
+    if (!config.mcpServers || !config.mcpServers[serverName]) {
+      throw new Error(`Server "${serverName}" not found in configuration`);
+    }
+    
+    // Create a server config structure in the expected format for the UI
+    const serverConfig = {
+      mcpServers: {
+        [serverName]: config.mcpServers[serverName]
+      }
+    };
+    
+    return serverConfig;
+  } catch (error) {
+    console.error(`Error getting server config for ${serverName}:`, error);
+    throw error;
+  }
+});
+
+ipcMain.handle('update-mcp-server', async (event, serverConfig) => {
+  if (!mcpClientManager) {
+    console.log('MCP Client Manager not initialized, trying to initialize now');
+    await initMcpClientManager();
+    
+    if (!mcpClientManager) {
+      throw new Error('Failed to initialize MCP Client Manager');
+    }
+  }
+  
+  try {
+    // First, validate the configuration format
+    if (!serverConfig.mcpServers || Object.keys(serverConfig.mcpServers).length === 0) {
+      throw new Error('Invalid server configuration: mcpServers is missing or empty');
+    }
+    
+    const [[serverName, config]] = Object.entries(serverConfig.mcpServers);
+    
+    if (!serverName) {
+      throw new Error('Invalid server configuration: server name is missing');
+    }
+    
+    // Check if the server exists in the current configuration
+    const existingClient = mcpClientManager.getClientByServerName(serverName);
+    if (!existingClient) {
+      throw new Error(`Server "${serverName}" not found. Cannot update.`);
+    }
+    
+    // Update the server in the mcpClientManager
+    await mcpClientManager.updateServer(serverConfig);
+    
+    return { success: true, serverName };
+  } catch (error) {
+    console.error('Error updating MCP server:', error);
+    return { success: false, error: (error as Error).message };
+  }
+});
+
 ipcMain.handle('add-mcp-server', async (event, serverConfig) => {
   if (!mcpClientManager) {
     console.log('MCP Client Manager not initialized, trying to initialize now');

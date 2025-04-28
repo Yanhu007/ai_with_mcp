@@ -1,24 +1,7 @@
 // McpConfigSidepane.tsx - Sidepane for MCP Servers Configuration
 import React, { useState, useEffect, useRef } from 'react';
+import EditServerModal from './EditServerModal';
 const ipcRenderer = typeof window !== 'undefined' && window.electron?.ipcRenderer;
-
-// Example templates for JSON configuration
-const stdioServerTemplate = {
-  mcpServers: {
-    "${server_name}": {
-      command: "${command}",
-      args: []
-    }
-  }
-};
-
-const sseServerTemplate = {
-  mcpServers: {
-    "${server_name}": {
-      url: "${sse_server_url}"
-    }
-  }
-};
 
 interface McpServer {
   serverName: string;
@@ -41,10 +24,10 @@ const McpConfigSidepane: React.FC<McpConfigSidepaneProps> = ({
 }) => {
   const [mcpServers, setMcpServers] = useState<McpServer[]>([]);
   const [loading, setLoading] = useState(true);
-  const [showAddServerModal, setShowAddServerModal] = useState(false);
-  const [serverConfigJson, setServerConfigJson] = useState('');
-  const [jsonError, setJsonError] = useState<string | null>(null);
+  const [showServerModal, setShowServerModal] = useState(false);
   const [addingServer, setAddingServer] = useState(false);
+  const [isEditingServer, setIsEditingServer] = useState(false);
+  const [currentServerName, setCurrentServerName] = useState<string | null>(null);
   
   const resizeHandleRef = useRef<HTMLDivElement>(null);
   const sidepaneRef = useRef<HTMLDivElement>(null);
@@ -133,6 +116,53 @@ const McpConfigSidepane: React.FC<McpConfigSidepaneProps> = ({
     };
   }, [initialWidth, setWidth]);
 
+  // Handle add/edit server save
+  const handleSaveServer = async (serverConfig: any) => {
+    try {
+      setAddingServer(true);
+      
+      // Check if window.electron.ipcRenderer exists before using it
+      if (!window.electron?.ipcRenderer) {
+        console.error('window.electron.ipcRenderer is not available');
+        return;
+      }
+      
+      const result = await window.electron?.ipcRenderer.invoke(
+        isEditingServer ? 'update-mcp-server' : 'add-mcp-server', 
+        serverConfig
+      );
+      
+      if (result.success) {
+        // Server added/updated successfully
+        setShowServerModal(false);
+        setIsEditingServer(false);
+        setCurrentServerName(null);
+        
+        // Reload the servers list
+        const clientsWithTools = await window.electron?.ipcRenderer.invoke('get-mcp-clients-with-tools');
+        const serversData = clientsWithTools.map((client: any) => ({
+          serverName: client.serverName,
+          isConnected: client.toolNames.length > 0,
+          availableTools: client.toolNames
+        }));
+        
+        setMcpServers(serversData);
+        
+        // Success message is now shown in the modal component directly
+        // No need to show an alert popup here
+      } else {
+        // Error adding/updating server
+        console.error(`Error ${isEditingServer ? 'updating' : 'adding'} server:`, result.error);
+        alert(`Error ${isEditingServer ? 'updating' : 'adding'} server: ${result.error}`);
+      }
+    } catch (error) {
+      console.error(`Error ${isEditingServer ? 'updating' : 'adding'} server:`, error);
+      alert(`Error ${isEditingServer ? 'updating' : 'adding'} server: ${(error as Error).message}`);
+    } finally {
+      setAddingServer(false);
+    }
+  };
+
   // Handle refresh connection for a server
   const handleRefreshServer = (serverName: string) => {
     // This is a placeholder - functionality will be implemented later
@@ -146,9 +176,20 @@ const McpConfigSidepane: React.FC<McpConfigSidepaneProps> = ({
   };
 
   // Handle edit server
-  const handleEditServer = (serverName: string) => {
-    // This is a placeholder - functionality will be implemented later
-    console.log(`Edit server: ${serverName}`);
+  const handleEditServer = async (serverName: string) => {
+    try {
+      setAddingServer(true);
+      setCurrentServerName(serverName);
+      setIsEditingServer(true);
+      
+      // The EditServerModal will fetch the configuration when it opens
+      setShowServerModal(true);
+    } catch (error) {
+      console.error(`Error preparing to edit server ${serverName}:`, error);
+      alert(`Error preparing to edit server: ${(error as Error).message}`);
+    } finally {
+      setAddingServer(false);
+    }
   };
 
   // Handle delete server
@@ -171,9 +212,9 @@ const McpConfigSidepane: React.FC<McpConfigSidepaneProps> = ({
           <button 
             className="add-server-btn" 
             onClick={() => {
-              setShowAddServerModal(true);
-              setServerConfigJson(JSON.stringify(stdioServerTemplate, null, 2));
-              setJsonError(null);
+              setShowServerModal(true);
+              setIsEditingServer(false);
+              setCurrentServerName(null);
             }}
             title="Add New Server"
           >
@@ -183,138 +224,15 @@ const McpConfigSidepane: React.FC<McpConfigSidepaneProps> = ({
         </div>
       </div>
       
-      {/* Add New Server Modal */}
-      {showAddServerModal && (
-        <div className="modal-overlay">
-          <div className="modal-container">
-            <div className="modal-header">
-              <h3>Add New MCP Server</h3>
-              <button 
-                className="close-modal-btn" 
-                onClick={() => setShowAddServerModal(false)}
-              >
-                &times;
-              </button>
-            </div>
-            <div className="modal-body">
-              <div className="config-templates">
-                <p>Templates:</p>
-                <button 
-                  onClick={() => {
-                    setServerConfigJson(JSON.stringify(stdioServerTemplate, null, 2));
-                    setJsonError(null);
-                  }}
-                >
-                  Stdio Example
-                </button>
-                <button 
-                  onClick={() => {
-                    setServerConfigJson(JSON.stringify(sseServerTemplate, null, 2));
-                    setJsonError(null);
-                  }}
-                >
-                  SSE Example
-                </button>
-              </div>
-              <textarea
-                className={`json-editor ${jsonError ? 'error' : ''}`}
-                value={serverConfigJson}
-                onChange={(e) => {
-                  setServerConfigJson(e.target.value);
-                  setJsonError(null);
-                }}
-                placeholder="Enter server configuration in JSON format"
-                rows={12}
-              />
-              {jsonError && (
-                <div className="error-message">
-                  {jsonError}
-                </div>
-              )}
-            </div>
-            <div className="modal-footer">
-              <button
-                className="cancel-btn"
-                onClick={() => setShowAddServerModal(false)}
-              >
-                Cancel
-              </button>
-              <button
-                className="save-btn"
-                disabled={addingServer}
-                onClick={async () => {
-                  try {
-                    // Validate JSON format
-                    let serverConfig;
-                    try {
-                      serverConfig = JSON.parse(serverConfigJson);
-                      
-                      // Check if mcpServers property exists
-                      if (!serverConfig.mcpServers) {
-                        setJsonError("Invalid configuration: 'mcpServers' property is missing");
-                        return;
-                      }
-                      
-                      // Check if there's at least one server
-                      const serverNames = Object.keys(serverConfig.mcpServers);
-                      if (serverNames.length === 0) {
-                        setJsonError("Invalid configuration: No server defined");
-                        return;
-                      }
-                      
-                      // Check if server config is valid
-                      const serverConfig1 = serverConfig.mcpServers[serverNames[0]];
-                      if (!serverConfig1.command && !serverConfig1.url) {
-                        setJsonError("Invalid configuration: Either 'command' or 'url' must be specified");
-                        return;
-                      }
-                    } catch (error) {
-                      setJsonError(`Invalid JSON: ${(error as Error).message}`);
-                      return;
-                    }
-                    
-                    // Save to local mcp.json
-                    setAddingServer(true);
-                    // Check if window.electron.ipcRenderer exists before using it
-                    if (!window.electron?.ipcRenderer) {
-                        console.error('window.electron.ipcRenderer is not available');
-                        return;
-                    }
-                    const result = await window.electron?.ipcRenderer.invoke('add-mcp-server', serverConfig);
-                    
-                    if (result.success) {
-                      // Server added successfully
-                      setShowAddServerModal(false);
-                      
-                      // Reload the servers list
-                      const clientsWithTools = await window.electron?.ipcRenderer.invoke('get-mcp-clients-with-tools');
-                      const serversData = clientsWithTools.map((client: any) => ({
-                        serverName: client.serverName,
-                        isConnected: client.toolNames.length > 0,
-                        availableTools: client.toolNames
-                      }));
-                      
-                      setMcpServers(serversData);
-                      
-                      // Show success message
-                      alert(`Server "${result.serverName}" added successfully`);
-                    } else {
-                      // Error adding server
-                      setJsonError(`Error adding server: ${result.error}`);
-                    }
-                  } catch (error) {
-                    setJsonError(`Error: ${(error as Error).message}`);
-                  } finally {
-                    setAddingServer(false);
-                  }
-                }}
-              >
-                {addingServer ? 'Saving...' : 'Save'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* Server Modal for Add/Edit */}
+      <EditServerModal 
+        isOpen={showServerModal}
+        onClose={() => setShowServerModal(false)}
+        isEditing={isEditingServer}
+        serverName={currentServerName}
+        isSaving={addingServer}
+        onSave={handleSaveServer}
+      />
       
       <div className="sidepane-content">
         {loading ? (

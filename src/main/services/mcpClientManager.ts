@@ -169,6 +169,116 @@ export class MCPClientManager {
       throw error;
     }
   }
+
+  /**
+   * Get the path to the MCP configuration file
+   * 
+   * @returns The path to the MCP configuration file
+   */
+  getConfigPath(): string {
+    return this.configPath;
+  }
+
+  /**
+   * Update an existing MCP server in the configuration file and reconnect
+   * 
+   * @param serverConfig - Updated configuration for the server
+   * @returns A promise that resolves to the server name if successful, or rejects with an error
+   */
+  async updateServer(serverConfig: McpConfigFile): Promise<string> {
+    try {
+      // Validate the server configuration
+      if (!serverConfig.mcpServers || Object.keys(serverConfig.mcpServers).length === 0) {
+        throw new Error('Invalid server configuration: mcpServers is missing or empty');
+      }
+      
+      const [[serverName, config]] = Object.entries(serverConfig.mcpServers);
+      
+      if (!serverName) {
+        throw new Error('Invalid server configuration: server name is missing');
+      }
+      
+      if (!this.mcpClients.has(serverName)) {
+        throw new Error(`Server with name "${serverName}" does not exist`);
+      }
+      
+      if (!config.command && !config.url) {
+        throw new Error('Invalid server configuration: either command or url must be provided');
+      }
+      
+      // Read existing configuration
+      let existingConfig: McpConfigFile;
+      try {
+        const configData = await fs.promises.readFile(this.configPath, 'utf-8');
+        existingConfig = JSON.parse(configData);
+      } catch (error) {
+        throw new Error(`Failed to read existing configuration: ${(error as Error).message}`);
+      }
+      
+      // Update the server in the configuration
+      existingConfig.mcpServers[serverName] = config;
+      
+      // Write the updated configuration to the file
+      await fs.promises.writeFile(
+        this.configPath,
+        JSON.stringify(existingConfig, null, 2),
+        'utf-8'
+      );
+      
+      // Get the existing client and clean it up
+      const existingClient = this.mcpClients.get(serverName);
+      if (existingClient) {
+        // Remove tool mappings for this client
+        for (const [toolName, client] of this.toolToClientMap.entries()) {
+          if (client === existingClient) {
+            this.toolToClientMap.delete(toolName);
+          }
+        }
+        
+        // Clean up the existing client connection
+        await existingClient.cleanup();
+      }
+      
+      // Create and initialize the new MCPClient with updated config
+      const mcpServer: McpServer = {
+        name: serverName,
+        transport: config.url ? 'sse' : 'stdio',
+        command: config.command || '',
+        args: config.args || [],
+        serverLink: config.url || ''
+      };
+      
+      const client = new MCPClient(mcpServer);
+      
+      // Store the client in the map, replacing the old one
+      this.mcpClients.set(serverName, client);
+      
+      // Try to connect to the server and get tools
+      try {
+        const result = await client.connectToServer();
+        if (result === 'connected') {
+          const tools = await client.getTools();
+          
+          // Create mappings from tool names to this client
+          tools.forEach(tool => {
+            this.toolToClientMap.set(tool.name, client);
+          });
+          
+          console.log(`Client ${serverName} updated and initialized successfully with ${tools.length} tools.`);
+        } else if (result instanceof Error) {
+          console.error(`Failed to connect to updated server ${serverName}:`, result.message);
+          // Keep the client in the map even if initial connection failed
+        }
+      } catch (error) {
+        console.error(`Error initializing updated MCPClient for server ${serverName}:`, error);
+      }
+      
+      return serverName;
+    } catch (error) {
+      console.error('Error updating server:', error);
+      throw error;
+    }
+  }
   
   /**
    * Get an MCPClient instance by server name
