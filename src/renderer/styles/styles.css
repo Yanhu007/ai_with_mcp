@@ -402,7 +402,8 @@ pre {
   height: 100%;
   position: relative;
   box-shadow: -1px 0 5px rgba(0, 0, 0, 0.1);
-  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
   transition: width 0.15s ease-in-out;
   z-index: 10;
 }
@@ -414,18 +415,14 @@ pre {
   padding: 1rem;
   background-color: #f0f0f0;
   border-bottom: 1px solid #ddd;
-}
-
-.close-btn {
-  background: none;
-  border: none;
-  font-size: 1.5rem;
-  cursor: pointer;
-  color: #333;
+  z-index: 2;
+  flex-shrink: 0;
 }
 
 .sidepane-content {
   padding: 1rem;
+  overflow-y: auto;
+  flex: 1;
 }
 
 .resize-handle {
