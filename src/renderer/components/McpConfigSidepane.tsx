@@ -2,6 +2,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import EditServerModal from './EditServerModal';
 import ConfirmationDialog from './ConfirmationDialog';
+import ToolDetailsModal from './ToolDetailsModal';
 const ipcRenderer = typeof window !== 'undefined' && window.electron?.ipcRenderer;
 
 interface McpServer {
@@ -33,6 +34,8 @@ const McpConfigSidepane: React.FC<McpConfigSidepaneProps> = ({
   const [currentServerName, setCurrentServerName] = useState<string | null>(null);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [serverToDelete, setServerToDelete] = useState<string | null>(null);
+  const [isToolDetailsModalOpen, setIsToolDetailsModalOpen] = useState(false);
+  const [selectedTool, setSelectedTool] = useState<{name: string, description?: string, inputSchema?: any, serverName?: string} | null>(null);
   
   const resizeHandleRef = useRef<HTMLDivElement>(null);
   const sidepaneRef = useRef<HTMLDivElement>(null);
@@ -345,6 +348,50 @@ const McpConfigSidepane: React.FC<McpConfigSidepaneProps> = ({
     }
   };
 
+  // Handle tool chip click to show details
+  const handleToolClick = async (toolName: string, serverName: string) => {
+    try {
+      // Check if window.electron.ipcRenderer exists before using it
+      if (!window.electron?.ipcRenderer) {
+        console.error('window.electron.ipcRenderer is not available');
+        return;
+      }
+      
+      // Get all tools to find the details for this specific tool
+      const allTools = await window.electron.ipcRenderer.invoke('get-all-mcp-tools');
+      
+      // Find the tool with the matching name
+      const toolDetails = allTools.find((tool: any) => tool.name === toolName);
+      
+      if (toolDetails) {
+        setSelectedTool({
+          name: toolDetails.name,
+          description: toolDetails.description || 'No description available',
+          inputSchema: toolDetails.inputSchema,
+          serverName: toolDetails.serverName || serverName
+        });
+        setIsToolDetailsModalOpen(true);
+      } else {
+        console.warn(`Tool details not found for ${toolName}`);
+        // Show a minimal version with just the name if details aren't available
+        setSelectedTool({
+          name: toolName,
+          serverName: serverName
+        });
+        setIsToolDetailsModalOpen(true);
+      }
+    } catch (error) {
+      console.error(`Error fetching tool details for ${toolName}:`, error);
+      // Show a minimal version with just the name if there's an error
+      setSelectedTool({
+        name: toolName,
+        description: `Error loading details: ${(error as Error).message}`,
+        serverName: serverName
+      });
+      setIsToolDetailsModalOpen(true);
+    }
+  };
+
   if (!isOpen) return null;
 
   return (
@@ -441,7 +488,7 @@ const McpConfigSidepane: React.FC<McpConfigSidepaneProps> = ({
                       <h4>Available Tools ({server.availableTools.length})</h4>
                       <div className="tools-container">
                         {server.availableTools.map((tool) => (
-                          <div className="tool-chip" key={tool} title={tool}>
+                          <div className="tool-chip" key={tool} title={tool} onClick={() => handleToolClick(tool, server.serverName)}>
                             <span className="tool-name">{tool}</span>
                           </div>
                         ))}
@@ -472,6 +519,13 @@ const McpConfigSidepane: React.FC<McpConfigSidepaneProps> = ({
         message={`Are you sure you want to delete server "${serverToDelete}"?`}
         onConfirm={confirmDeleteServer}
         onCancel={() => setIsDeleteDialogOpen(false)}
+      />
+
+      {/* Tool Details Modal */}
+      <ToolDetailsModal 
+        isOpen={isToolDetailsModalOpen}
+        onClose={() => setIsToolDetailsModalOpen(false)}
+        tool={selectedTool}
       />
     </div>
   );

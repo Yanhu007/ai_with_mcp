@@ -688,3 +688,52 @@ pre {
 .confirmation-dialog .delete-btn:hover {
   background-color: #c53030;
 }
+
+/* Tool details modal styles */
+.tool-details-modal {
+  max-width: 500px;
+}
+
+.tool-details-modal .modal-header {
+  background-color: #f0f7ff;
+}
+
+.tool-details-modal .close-btn {
+  background: none;
+  border: none;
+  font-size: 1.5rem;
+  cursor: pointer;
+  line-height: 1;
+  color: #333;
+}
+
+.tool-details-modal .server-info {
+  margin-bottom: 16px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid #eee;
+  font-size: 0.9rem;
+}
+
+.tool-details-modal .description-section,
+.tool-details-modal .parameters-section {
+  margin-bottom: 20px;
+}
+
+.tool-details-modal h4 {
+  font-size: 1rem;
+  margin-bottom: 8px;
+  color: #444;
+}
+
+.tool-details-modal .parameters-json {
+  background-color: #f8f8f8;
+  border: 1px solid #e0e0e0;
+  border-radius: 4px;
+  padding: 12px;
+  overflow-x: auto;
+  font-family: 'Courier New', Courier, monospace;
+  font-size: 0.85rem;
+  line-height: 1.4;
+  max-height: 300px;
+  overflow-y: auto;
+}
