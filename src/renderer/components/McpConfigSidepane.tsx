@@ -1,6 +1,7 @@
 // McpConfigSidepane.tsx - Sidepane for MCP Servers Configuration
 import React, { useState, useEffect, useRef } from 'react';
 import EditServerModal from './EditServerModal';
+import ConfirmationDialog from './ConfirmationDialog';
 const ipcRenderer = typeof window !== 'undefined' && window.electron?.ipcRenderer;
 
 interface McpServer {
@@ -30,6 +31,8 @@ const McpConfigSidepane: React.FC<McpConfigSidepaneProps> = ({
   const [addingServer, setAddingServer] = useState(false);
   const [isEditingServer, setIsEditingServer] = useState(false);
   const [currentServerName, setCurrentServerName] = useState<string | null>(null);
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+  const [serverToDelete, setServerToDelete] = useState<string | null>(null);
   
   const resizeHandleRef = useRef<HTMLDivElement>(null);
   const sidepaneRef = useRef<HTMLDivElement>(null);
@@ -282,56 +285,63 @@ const McpConfigSidepane: React.FC<McpConfigSidepaneProps> = ({
 
   // Handle delete server
   const handleDeleteServer = (serverName: string) => {
-    // Show confirmation dialog
-    if (window.confirm(`Are you sure you want to delete server "${serverName}"?`)) {
-      try {
-        // Check if window.electron.ipcRenderer exists before using it
-        if (!window.electron?.ipcRenderer) {
-          console.error('window.electron.ipcRenderer is not available');
-          return;
-        }
-        
-        // Call the IPC method to delete the server
-        window.electron.ipcRenderer.invoke('delete-mcp-server', serverName)
-          .then((result: any) => {
-            if (result.success) {
-              // Server deleted successfully
-              // Reload the servers list
-              window.electron?.ipcRenderer.invoke('get-mcp-clients-with-tools')
-                .then((clientsWithTools: any) => {
-                  const serversData = clientsWithTools.map((client: any) => ({
-                    serverName: client.serverName,
-                    isConnected: client.toolNames.length > 0,
-                    availableTools: client.toolNames
-                  }));
-                  
-                  setMcpServers(serversData);
-                  
-                  // Refresh the available tools list in chatApi
-                  if (window.chatApi && typeof window.chatApi.refreshAvailableTools === 'function') {
-                    window.chatApi.refreshAvailableTools()
-                      .then((tools: any[]) => {
-                        console.log(`Tools list refreshed after server deletion, ${tools.length} tools available`);
-                      })
-                      .catch((error: Error) => {
-                        console.error('Error refreshing tools list:', error);
-                      });
-                  }
-                });
-            } else {
-              // Error deleting server
-              console.error(`Error deleting server:`, result.error);
-              alert(`Error deleting server: ${result.error}`);
-            }
-          })
-          .catch((error: Error) => {
-            console.error(`Error deleting server:`, error);
-            alert(`Error deleting server: ${error.message}`);
-          });
-      } catch (error) {
-        console.error(`Error deleting server:`, error);
-        alert(`Error deleting server: ${(error as Error).message}`);
+    setIsDeleteDialogOpen(true);
+    setServerToDelete(serverName);
+  };
+
+  const confirmDeleteServer = () => {
+    if (!serverToDelete) return;
+
+    try {
+      // Check if window.electron.ipcRenderer exists before using it
+      if (!window.electron?.ipcRenderer) {
+        console.error('window.electron.ipcRenderer is not available');
+        return;
       }
+      
+      // Call the IPC method to delete the server
+      window.electron.ipcRenderer.invoke('delete-mcp-server', serverToDelete)
+        .then((result: any) => {
+          if (result.success) {
+            // Server deleted successfully
+            // Reload the servers list
+            window.electron?.ipcRenderer.invoke('get-mcp-clients-with-tools')
+              .then((clientsWithTools: any) => {
+                const serversData = clientsWithTools.map((client: any) => ({
+                  serverName: client.serverName,
+                  isConnected: client.toolNames.length > 0,
+                  availableTools: client.toolNames
+                }));
+                
+                setMcpServers(serversData);
+                
+                // Refresh the available tools list in chatApi
+                if (window.chatApi && typeof window.chatApi.refreshAvailableTools === 'function') {
+                  window.chatApi.refreshAvailableTools()
+                    .then((tools: any[]) => {
+                      console.log(`Tools list refreshed after server deletion, ${tools.length} tools available`);
+                    })
+                    .catch((error: Error) => {
+                      console.error('Error refreshing tools list:', error);
+                    });
+                }
+              });
+          } else {
+            // Error deleting server
+            console.error(`Error deleting server:`, result.error);
+            alert(`Error deleting server: ${result.error}`);
+          }
+        })
+        .catch((error: Error) => {
+          console.error(`Error deleting server:`, error);
+          alert(`Error deleting server: ${error.message}`);
+        });
+    } catch (error) {
+      console.error(`Error deleting server:`, error);
+      alert(`Error deleting server: ${(error as Error).message}`);
+    } finally {
+      setIsDeleteDialogOpen(false);
+      setServerToDelete(null);
     }
   };
 
@@ -454,6 +464,15 @@ const McpConfigSidepane: React.FC<McpConfigSidepaneProps> = ({
         className="resize-handle"
         title="Drag to resize"
       ></div>
+
+      {/* Confirmation Dialog for Deletion */}
+      <ConfirmationDialog
+        isOpen={isDeleteDialogOpen}
+        title="Confirm Deletion"
+        message={`Are you sure you want to delete server "${serverToDelete}"?`}
+        onConfirm={confirmDeleteServer}
+        onCancel={() => setIsDeleteDialogOpen(false)}
+      />
     </div>
   );
 };
