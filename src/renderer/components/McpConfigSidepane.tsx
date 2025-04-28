@@ -7,6 +7,8 @@ interface McpServer {
   serverName: string;
   isConnected: boolean;
   availableTools: string[];
+  errorMessage?: string; // Added error message property
+  isReconnecting?: boolean; // Added reconnecting status property
 }
 
 interface McpConfigSidepaneProps {
@@ -53,7 +55,8 @@ const McpConfigSidepane: React.FC<McpConfigSidepaneProps> = ({
         const serversData = clientsWithTools.map((client: any) => ({
           serverName: client.serverName,
           isConnected: client.toolNames.length > 0, // If has tools, it's connected
-          availableTools: client.toolNames
+          availableTools: client.toolNames,
+          errorMessage: client.errorMessage // Include error message from the server
         }));
         
         setMcpServers(serversData);
@@ -175,15 +178,89 @@ const McpConfigSidepane: React.FC<McpConfigSidepaneProps> = ({
   };
 
   // Handle refresh connection for a server
-  const handleRefreshServer = (serverName: string) => {
-    // This is a placeholder - functionality will be implemented later
-    console.log(`Refresh server: ${serverName}`);
-  };
-
-  // Handle disable/enable server
-  const handleToggleServerStatus = (serverName: string) => {
-    // This is a placeholder - functionality will be implemented later
-    console.log(`Toggle server status: ${serverName}`);
+  const handleRefreshServer = async (serverName: string) => {
+    try {
+      // Check if window.electron.ipcRenderer exists before using it
+      if (!window.electron?.ipcRenderer) {
+        console.error('window.electron.ipcRenderer is not available');
+        return;
+      }
+      
+      // Mark the server as reconnecting
+      setMcpServers((prevServers) => 
+        prevServers.map((server) => 
+          server.serverName === serverName ? { ...server, isReconnecting: true, errorMessage: undefined } : server
+        )
+      );
+      
+      // Call the IPC method to refresh the server connection
+      const result = await window.electron.ipcRenderer.invoke('refresh-mcp-server', serverName);
+      
+      if (result.success) {
+        // Connection refreshed successfully
+        console.log(`Server ${serverName} connection refreshed with tools:`, result.tools);
+        
+        // Update server data with new tools
+        setMcpServers((prevServers) => 
+          prevServers.map((server) => 
+            server.serverName === serverName ? 
+              { 
+                ...server, 
+                isConnected: result.tools.length > 0, 
+                availableTools: result.tools,
+                errorMessage: undefined
+              } : server
+          )
+        );
+        
+        // Refresh the available tools list in chatApi
+        if (window.chatApi && typeof window.chatApi.refreshAvailableTools === 'function') {
+          window.chatApi.refreshAvailableTools()
+            .then((tools: any[]) => {
+              console.log(`Tools list refreshed after server reconnection, ${tools.length} tools available`);
+            })
+            .catch((error: Error) => {
+              console.error('Error refreshing tools list:', error);
+            });
+        }
+      } else {
+        // Error refreshing connection
+        console.error(`Error refreshing connection for server ${serverName}:`, result.error);
+        
+        // Update server with error message
+        setMcpServers((prevServers) => 
+          prevServers.map((server) => 
+            server.serverName === serverName ? 
+              { 
+                ...server, 
+                isConnected: false,
+                errorMessage: result.error
+              } : server
+          )
+        );
+      }
+    } catch (error) {
+      console.error(`Error refreshing connection for server ${serverName}:`, error);
+      
+      // Update server with error message
+      setMcpServers((prevServers) => 
+        prevServers.map((server) => 
+          server.serverName === serverName ? 
+            { 
+              ...server, 
+              isConnected: false,
+              errorMessage: (error as Error).message
+            } : server
+        )
+      );
+    } finally {
+      // Reset the reconnecting state
+      setMcpServers((prevServers) => 
+        prevServers.map((server) => 
+          server.serverName === serverName ? { ...server, isReconnecting: false } : server
+        )
+      );
+    }
   };
 
   // Handle edit server
@@ -310,20 +387,15 @@ const McpConfigSidepane: React.FC<McpConfigSidepaneProps> = ({
                     <h3 className="server-name">{server.serverName}</h3>
                   </div>
                   <div className="server-actions">
-                    <button 
-                      className="action-btn" 
-                      onClick={() => handleRefreshServer(server.serverName)}
-                      title="Refresh Connection"
-                    >
-                      🔄
-                    </button>
-                    <button 
-                      className="action-btn" 
-                      onClick={() => handleToggleServerStatus(server.serverName)}
-                      title={server.isConnected ? "Disable" : "Enable"}
-                    >
-                      {server.isConnected ? '✅' : '❌'}
-                    </button>
+                    {!server.isConnected && !server.isReconnecting && (
+                      <button 
+                        className="action-btn" 
+                        onClick={() => handleRefreshServer(server.serverName)}
+                        title="Refresh Connection"
+                      >
+                        🔄
+                      </button>
+                    )}
                     <button 
                       className="action-btn" 
                       onClick={() => handleEditServer(server.serverName)}
@@ -342,17 +414,29 @@ const McpConfigSidepane: React.FC<McpConfigSidepaneProps> = ({
                 </div>
                 
                 <div className="server-card-content">
-                  <h4>Available Tools ({server.availableTools.length})</h4>
-                  {server.availableTools.length > 0 ? (
-                    <div className="tools-container">
-                      {server.availableTools.map((tool) => (
-                        <div className="tool-chip" key={tool} title={tool}>
-                          <span className="tool-name">{tool}</span>
-                        </div>
-                      ))}
+                  {server.isReconnecting ? (
+                    <div className="server-reconnecting">
+                      <p className="reconnecting-text">Reconnecting...</p>
                     </div>
+                  ) : !server.isConnected ? (
+                    server.errorMessage ? (
+                      <div className="server-error-message">
+                        <p className="error-text">Error: {server.errorMessage}</p>
+                      </div>
+                    ) : (
+                      <p className="no-tools">Server is disconnected</p>
+                    )
                   ) : (
-                    <p className="no-tools">No tools available</p>
+                    <>
+                      <h4>Available Tools ({server.availableTools.length})</h4>
+                      <div className="tools-container">
+                        {server.availableTools.map((tool) => (
+                          <div className="tool-chip" key={tool} title={tool}>
+                            <span className="tool-name">{tool}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </>
                   )}
                 </div>
               </div>

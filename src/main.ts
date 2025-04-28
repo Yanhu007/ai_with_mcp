@@ -257,7 +257,24 @@ ipcMain.handle('get-mcp-clients-with-tools', async () => {
   
   try {
     const clientsWithTools = mcpClientManager.getAllClientsWithTools();
-    return clientsWithTools;
+
+    // Enhance the client data with connection error messages
+    const enhancedClients = clientsWithTools.map(client => {
+      const mcpClient = mcpClientManager?.getClientByServerName(client.serverName);
+      const hasTools = client.toolNames.length > 0;
+      
+      // If the client has no tools, it might be disconnected due to an error
+      if (!hasTools && mcpClient) {
+        return {
+          ...client,
+          errorMessage: mcpClient.getLastError()?.message || "Failed to connect to the server"
+        };
+      }
+      
+      return client;
+    });
+    
+    return enhancedClients;
   } catch (error) {
     console.error('Error getting MCP clients with tools:', error);
     return [];
@@ -290,6 +307,68 @@ ipcMain.handle('execute-mcp-tool', async (event, { toolName, toolArgs }) => {
   } catch (error) {
     console.error(`Error executing tool ${toolName}:`, error);
     throw error;
+  }
+});
+
+// Handler for refreshing MCP server connection
+ipcMain.handle('refresh-mcp-server', async (event, serverName) => {
+  try {
+    console.log(`Refreshing MCP server connection for ${serverName}`);
+    
+    if (!mcpClientManager) {
+      throw new Error('MCP Client Manager not initialized');
+    }
+
+    // Get the client by server name
+    const client = mcpClientManager.getClientByServerName(serverName);
+    
+    if (!client) {
+      console.error(`Server ${serverName} not found`);
+      return { success: false, error: `Server ${serverName} not found` };
+    }
+    
+    // First clean up existing connection
+    await client.cleanup();
+    
+    // Remove existing tool mappings for this client
+    const existingTools = mcpClientManager.getAllClientsWithTools()
+      .find(c => c.serverName === serverName)?.toolNames || [];
+      
+    console.log(`Removing ${existingTools.length} existing tool mappings for ${serverName}`);
+    
+    // Reconnect to the server
+    const connectionResult = await client.connectToServer();
+    
+    if (connectionResult === 'connected') {
+      // Get updated tools
+      const tools = await client.getTools();
+      
+      // Return success with the tools
+      console.log(`Successfully reconnected to ${serverName} with ${tools.length} tools`);
+      
+      return { 
+        success: true, 
+        tools: tools.map(t => t.name)
+      };
+    } else if (connectionResult instanceof Error) {
+      console.error(`Failed to reconnect to ${serverName}:`, connectionResult.message);
+      return { 
+        success: false, 
+        error: connectionResult.message
+      };
+    } else {
+      console.error(`Failed to reconnect to ${serverName} with unknown error`);
+      return { 
+        success: false, 
+        error: 'Unknown connection error'
+      };
+    }
+  } catch (error) {
+    console.error(`Error refreshing MCP server connection for ${serverName}:`, error);
+    return { 
+      success: false, 
+      error: (error as Error).message
+    };
   }
 });
 }

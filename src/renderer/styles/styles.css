@@ -396,7 +396,7 @@ pre {
   }
 }
 
-/* Sidepane styling */
+/* MCP Config Sidepane styles */
 .config-sidepane {
   background-color: #fff;
   height: 100%;
@@ -606,4 +606,56 @@ pre {
   .resize-handle {
     display: none;
   }
+}
+
+/* Server reconnecting state */
+.server-reconnecting {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 60px;
+  padding: 10px;
+  background-color: #f6f6f6;
+  border-radius: 4px;
+}
+
+.reconnecting-text {
+  color: #666;
+  font-style: italic;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  align-items: center;
+}
+
+.reconnecting-text::before {
+  content: "";
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border: 2px solid #666;
+  border-radius: 50%;
+  border-top-color: transparent;
+  margin-right: 8px;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* Server error message */
+.server-error-message {
+  background-color: #fff5f5;
+  border-left: 3px solid #e53e3e;
+  padding: 10px;
+  margin: 5px 0;
+  border-radius: 4px;
+}
+
+.error-text {
+  color: #e53e3e;
+  margin: 0;
+  font-size: 14px;
+  word-break: break-word;
 }

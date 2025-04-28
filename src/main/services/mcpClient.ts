@@ -14,10 +14,12 @@ export class MCPClient {
   private mcp: Client;
   private transport: StdioClientTransport | SSEClientTransport | null = null;
   private tools: Tool[] = [];
+  private lastError: Error | null = null; // Track the last connection error
 
   constructor(mcpServer: McpServer) {
     this.server = mcpServer;
     this.mcp = new Client({ name: this.server.name, version: "1.0.0" });
+    this.lastError = null;
   }
 
   async connectToServer(): Promise<string | Error> {
@@ -44,11 +46,18 @@ export class MCPClient {
         "Connected to server with tools:",
         this.tools.map(({ name }) => name),
       );
+      this.lastError = null; // Clear any previous error on successful connection
       return "connected";
     } catch (e) {
       console.log("Failed to connect to MCP server: ", e);
-      return e instanceof Error ? e : new Error(String(e));
+      this.lastError = e instanceof Error ? e : new Error(String(e));
+      return this.lastError;
     }
+  }
+
+  // Get the last connection error
+  getLastError(): Error | null {
+    return this.lastError;
   }
 
   async getTools(): Promise<Tool[]> {
