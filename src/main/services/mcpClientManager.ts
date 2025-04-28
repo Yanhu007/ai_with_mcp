@@ -391,4 +391,65 @@ export class MCPClientManager {
     this.mcpClients.clear();
     this.toolToClientMap.clear();
   }
+
+  /**
+   * Delete an MCP server from the configuration file and clean up the client
+   * 
+   * @param serverName - The name of the MCP server to delete
+   * @returns A promise that resolves when the server is deleted
+   */
+  async deleteServer(serverName: string): Promise<void> {
+    try {
+      // Check if the server exists
+      if (!this.mcpClients.has(serverName)) {
+        throw new Error(`Server with name "${serverName}" does not exist`);
+      }
+      
+      // Read existing configuration
+      let existingConfig: McpConfigFile;
+      try {
+        const configData = await fs.promises.readFile(this.configPath, 'utf-8');
+        existingConfig = JSON.parse(configData);
+      } catch (error) {
+        throw new Error(`Failed to read existing configuration: ${(error as Error).message}`);
+      }
+      
+      // Check if the server exists in the config
+      if (!existingConfig.mcpServers[serverName]) {
+        throw new Error(`Server "${serverName}" not found in configuration file`);
+      }
+      
+      // Get the existing client and clean it up
+      const existingClient = this.mcpClients.get(serverName);
+      if (existingClient) {
+        // Remove tool mappings for this client
+        for (const [toolName, client] of this.toolToClientMap.entries()) {
+          if (client === existingClient) {
+            this.toolToClientMap.delete(toolName);
+          }
+        }
+        
+        // Clean up the existing client connection
+        await existingClient.cleanup();
+        
+        // Remove the client from the map
+        this.mcpClients.delete(serverName);
+      }
+      
+      // Remove the server from the configuration
+      delete existingConfig.mcpServers[serverName];
+      
+      // Write the updated configuration to the file
+      await fs.promises.writeFile(
+        this.configPath,
+        JSON.stringify(existingConfig, null, 2),
+        'utf-8'
+      );
+      
+      console.log(`Server "${serverName}" deleted successfully`);
+    } catch (error) {
+      console.error(`Error deleting server "${serverName}":`, error);
+      throw error;
+    }
+  }
 }

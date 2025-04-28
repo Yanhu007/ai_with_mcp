@@ -477,6 +477,42 @@ class ChatApi {
     // 返回增强后的消息
     return currentMessages;
   }
+
+  // Refresh available tools list - called after server operations (add/update/delete)
+  async refreshAvailableTools() {
+    try {
+      // Get MCP client manager status
+      const mcpManagerAvailable = await ipcRenderer.invoke('get-mcp-client-manager');
+      
+      if (mcpManagerAvailable) {
+        // Get available tools
+        const tools = await ipcRenderer.invoke('get-all-mcp-tools');
+        
+        console.log('Refreshed MCP tools list, found:', 
+          tools.map(tool => tool.name));
+        
+        // Format tools for Azure OpenAI API
+        this.availableTools = tools.map(tool => ({
+          type: "function",
+          function: {
+            name: tool.name,
+            description: tool.description || "",
+            parameters: tool.inputSchema
+          }
+        }));
+
+        return this.availableTools;
+      }
+      
+      // If MCP client manager is not available, clear tools
+      this.availableTools = [];
+      return [];
+    } catch (error) {
+      console.error('Failed to refresh MCP tools:', error);
+      this.availableTools = [];
+      return [];
+    }
+  }
 }
 
 // Create and export a singleton instance

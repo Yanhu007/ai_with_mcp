@@ -148,6 +148,17 @@ const McpConfigSidepane: React.FC<McpConfigSidepaneProps> = ({
         
         setMcpServers(serversData);
         
+        // Refresh the available tools list in chatApi
+        if (window.chatApi && typeof window.chatApi.refreshAvailableTools === 'function') {
+          window.chatApi.refreshAvailableTools()
+            .then((tools: any[]) => {
+              console.log(`Tools list refreshed after server ${isEditingServer ? 'update' : 'addition'}, ${tools.length} tools available`);
+            })
+            .catch((error: Error) => {
+              console.error('Error refreshing tools list:', error);
+            });
+        }
+        
         // Success message is now shown in the modal component directly
         // No need to show an alert popup here
       } else {
@@ -194,8 +205,57 @@ const McpConfigSidepane: React.FC<McpConfigSidepaneProps> = ({
 
   // Handle delete server
   const handleDeleteServer = (serverName: string) => {
-    // This is a placeholder - functionality will be implemented later
-    console.log(`Delete server: ${serverName}`);
+    // Show confirmation dialog
+    if (window.confirm(`Are you sure you want to delete server "${serverName}"?`)) {
+      try {
+        // Check if window.electron.ipcRenderer exists before using it
+        if (!window.electron?.ipcRenderer) {
+          console.error('window.electron.ipcRenderer is not available');
+          return;
+        }
+        
+        // Call the IPC method to delete the server
+        window.electron.ipcRenderer.invoke('delete-mcp-server', serverName)
+          .then((result: any) => {
+            if (result.success) {
+              // Server deleted successfully
+              // Reload the servers list
+              window.electron?.ipcRenderer.invoke('get-mcp-clients-with-tools')
+                .then((clientsWithTools: any) => {
+                  const serversData = clientsWithTools.map((client: any) => ({
+                    serverName: client.serverName,
+                    isConnected: client.toolNames.length > 0,
+                    availableTools: client.toolNames
+                  }));
+                  
+                  setMcpServers(serversData);
+                  
+                  // Refresh the available tools list in chatApi
+                  if (window.chatApi && typeof window.chatApi.refreshAvailableTools === 'function') {
+                    window.chatApi.refreshAvailableTools()
+                      .then((tools: any[]) => {
+                        console.log(`Tools list refreshed after server deletion, ${tools.length} tools available`);
+                      })
+                      .catch((error: Error) => {
+                        console.error('Error refreshing tools list:', error);
+                      });
+                  }
+                });
+            } else {
+              // Error deleting server
+              console.error(`Error deleting server:`, result.error);
+              alert(`Error deleting server: ${result.error}`);
+            }
+          })
+          .catch((error: Error) => {
+            console.error(`Error deleting server:`, error);
+            alert(`Error deleting server: ${error.message}`);
+          });
+      } catch (error) {
+        console.error(`Error deleting server:`, error);
+        alert(`Error deleting server: ${(error as Error).message}`);
+      }
+    }
   };
 
   if (!isOpen) return null;

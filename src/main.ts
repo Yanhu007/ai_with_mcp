@@ -217,6 +217,38 @@ ipcMain.handle('add-mcp-server', async (event, serverConfig) => {
   }
 });
 
+ipcMain.handle('delete-mcp-server', async (event, serverName) => {
+  if (!mcpClientManager) {
+    console.log('MCP Client Manager not initialized, trying to initialize now');
+    await initMcpClientManager();
+    
+    if (!mcpClientManager) {
+      throw new Error('Failed to initialize MCP Client Manager');
+    }
+  }
+  
+  try {
+    // Validate the server name
+    if (!serverName) {
+      throw new Error('Server name is missing');
+    }
+    
+    // Check if the server exists
+    const existingClient = mcpClientManager.getClientByServerName(serverName);
+    if (!existingClient) {
+      throw new Error(`Server "${serverName}" not found. Cannot delete.`);
+    }
+    
+    // Delete the server from the mcpClientManager
+    await mcpClientManager.deleteServer(serverName);
+    
+    return { success: true, serverName };
+  } catch (error) {
+    console.error('Error deleting MCP server:', error);
+    return { success: false, error: (error as Error).message };
+  }
+});
+
 ipcMain.handle('get-mcp-clients-with-tools', async () => {
   if (!mcpClientManager) {
     console.log('MCP Client Manager not initialized when requesting clients');
