@@ -42,40 +42,66 @@ const McpConfigSidepane: React.FC<McpConfigSidepaneProps> = ({
   const isDraggingRef = useRef<boolean>(false);
   const startXRef = useRef<number>(0);
   const startWidthRef = useRef<number>(0);
+  const refreshIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
-  // Load MCP servers data
+  // Function to fetch MCP servers data
+  const fetchMcpServers = async () => {
+    try {
+      // Don't set loading to true to avoid UI flicker
+      
+      // Check if window.electron.ipcRenderer exists before using it
+      if (!window.electron?.ipcRenderer) {
+        console.error('window.electron.ipcRenderer is not available');
+        return;
+      }
+      
+      const clientsWithTools = await window.electron?.ipcRenderer.invoke('get-mcp-clients-with-tools');
+      
+      // Format the data
+      const serversData = clientsWithTools.map((client: any) => ({
+        serverName: client.serverName,
+        isConnected: client.toolNames.length > 0, // If has tools, it's connected
+        availableTools: client.toolNames,
+        errorMessage: client.errorMessage, // Include error message from the server
+        isReconnecting: client.isReconnecting
+      }));
+      
+      setMcpServers(serversData);
+    } catch (error) {
+      console.error('Error fetching MCP servers:', error);
+    } finally {
+      setLoading(false); // Always ensure loading is set to false
+    }
+  };
+
+  // Load MCP servers data on open and setup periodic refresh
   useEffect(() => {
-    const fetchMcpServers = async () => {
-      try {
-        setLoading(true);
-        // Get all servers with their tools
-        // Check if window.electron.ipcRenderer exists before using it
-        if (!window.electron?.ipcRenderer) {
-          console.error('window.electron.ipcRenderer is not available');
-          return;
-        }
-        
-        const clientsWithTools = await window.electron?.ipcRenderer.invoke('get-mcp-clients-with-tools');
-        
-        // Format the data
-        const serversData = clientsWithTools.map((client: any) => ({
-          serverName: client.serverName,
-          isConnected: client.toolNames.length > 0, // If has tools, it's connected
-          availableTools: client.toolNames,
-          errorMessage: client.errorMessage // Include error message from the server
-        }));
-        
-        setMcpServers(serversData);
-      } catch (error) {
-        console.error('Error fetching MCP servers:', error);
-      } finally {
-        setLoading(false);
+    if (isOpen) {
+      // Initial fetch
+      fetchMcpServers();
+      
+      // Setup periodic refresh (every 5 seconds)
+      refreshIntervalRef.current = setInterval(() => {
+        fetchMcpServers();
+      }, 2000);
+      
+      // Setup event listener for server changes
+      if (window.electron?.ipcRenderer) {
+        window.electron.ipcRenderer.on('mcp-servers-changed', fetchMcpServers);
+      }
+    }
+    
+    // Cleanup interval and event listener when component unmounts or sidepane closes
+    return () => {
+      if (refreshIntervalRef.current) {
+        clearInterval(refreshIntervalRef.current);
+        refreshIntervalRef.current = null;
+      }
+      
+      if (window.electron?.ipcRenderer) {
+        window.electron.ipcRenderer.removeListener('mcp-servers-changed', fetchMcpServers);
       }
     };
-
-    if (isOpen) {
-      fetchMcpServers();
-    }
   }, [isOpen]);
 
   // Setup resize functionality
@@ -429,9 +455,7 @@ const McpConfigSidepane: React.FC<McpConfigSidepaneProps> = ({
       />
       
       <div className="sidepane-content">
-        {loading ? (
-          <div className="loading-indicator">Loading MCP servers...</div>
-        ) : mcpServers.length > 0 ? (
+        {mcpServers.length > 0 ? (
           <div className="server-cards">
             {mcpServers.map((server) => (
               <div key={server.serverName} className="server-card">

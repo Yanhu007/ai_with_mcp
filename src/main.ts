@@ -72,6 +72,7 @@ app.whenReady().then(async () => {
   await initMcpMarketPlaceManager(); // Initialize marketplace manager first
   await initMcpClientManager();
   setupIpcHandlers();
+  setupEventForwarding(); // Add event forwarding
   createWindow();
 });
 
@@ -474,4 +475,20 @@ ipcMain.handle('refresh-mcp-server', async (event, serverName) => {
     };
   }
 });
+}
+
+// Setup event forwarding from main process to renderer
+function setupEventForwarding() {
+  if (!mcpClientManager) {
+    console.error('Cannot setup event forwarding: MCP Client Manager not initialized');
+    return;
+  }
+
+  // Forward 'mcp-servers-changed' events from MCPClientManager to the renderer process
+  mcpClientManager.on('mcp-servers-changed', () => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      console.log('Forwarding mcp-servers-changed event to renderer');
+      mainWindow.webContents.send('mcp-servers-changed');
+    }
+  });
 }

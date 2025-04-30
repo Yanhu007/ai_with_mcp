@@ -2,6 +2,7 @@ import { MCPClient } from './mcpClient';
 import { McpServer } from '../types/McpServerTypes';
 import * as fs from 'fs';
 import * as path from 'path';
+import { EventEmitter } from 'events';
 
 interface McpConfigFile {
   mcpServers: {
@@ -13,11 +14,15 @@ interface McpConfigFile {
   };
 }
 
-export class MCPClientManager {
+export class MCPClientManager extends EventEmitter {
   private mcpClients: Map<string, MCPClient> = new Map();
   private toolToClientMap: Map<string, MCPClient> = new Map();
   private configPath: string = path.join(__dirname, '../../../resources/mcp.json');
   
+  constructor() {
+    super();
+  }
+
   /**
    * Initialize the MCPClientManager by loading MCP server configurations
    * from the specified JSON file and creating MCPClient instances
@@ -163,6 +168,9 @@ export class MCPClientManager {
         console.error(`Error initializing MCPClient for server ${serverName}:`, error);
       }
       
+      // Emit an event to notify the UI that servers have changed
+      this.emit('mcp-servers-changed');
+      
       return serverName;
     } catch (error) {
       console.error('Error adding server:', error);
@@ -272,6 +280,9 @@ export class MCPClientManager {
       } catch (error) {
         console.error(`Error initializing updated MCPClient for server ${serverName}:`, error);
       }
+      
+      // Emit an event to notify the UI that servers have changed
+      this.emit('mcp-servers-changed');
       
       return serverName;
     } catch (error) {
@@ -447,9 +458,84 @@ export class MCPClientManager {
       );
       
       console.log(`Server "${serverName}" deleted successfully`);
+      
+      // Emit an event to notify the UI that servers have changed
+      this.emit('mcp-servers-changed');
     } catch (error) {
       console.error(`Error deleting server "${serverName}":`, error);
       throw error;
+    }
+  }
+  
+  /**
+   * Refresh the connection to an MCP server and update its tools
+   * 
+   * @param serverName - The name of the MCP server to refresh
+   * @returns A promise that resolves with the updated tools list or an error
+   */
+  async refreshServerConnection(serverName: string): Promise<{ success: boolean; tools?: string[]; error?: string }> {
+    try {
+      // Check if the server exists
+      const client = this.mcpClients.get(serverName);
+      if (!client) {
+        return { success: false, error: `Server with name "${serverName}" does not exist` };
+      }
+      
+      // Clean up existing tool mappings for this client
+      for (const [toolName, mappedClient] of this.toolToClientMap.entries()) {
+        if (mappedClient === client) {
+          this.toolToClientMap.delete(toolName);
+        }
+      }
+      
+      // Try to reconnect to the server
+      const connectResult = await client.connectToServer();
+      
+      if (connectResult === 'connected') {
+        // Get the updated tools list
+        const tools = await client.getTools();
+        
+        // Update tool mappings
+        tools.forEach(tool => {
+          this.toolToClientMap.set(tool.name, client);
+        });
+        
+        console.log(`Server ${serverName} reconnected successfully with ${tools.length} tools`);
+        
+        // Emit an event to notify the UI that servers have changed
+        this.emit('mcp-servers-changed');
+        
+        return { 
+          success: true, 
+          tools: tools.map(tool => tool.name) 
+        };
+      } else if (connectResult instanceof Error) {
+        console.error(`Failed to reconnect to server ${serverName}:`, connectResult.message);
+        
+        // Emit an event to notify the UI that servers have changed (even in failure case)
+        this.emit('mcp-servers-changed');
+        
+        return { 
+          success: false, 
+          error: connectResult.message 
+        };
+      }
+      
+      // This should not happen, but TypeScript wants a return here
+      return { 
+        success: false, 
+        error: 'Unknown error reconnecting to server' 
+      };
+    } catch (error) {
+      console.error(`Error refreshing server connection for ${serverName}:`, error);
+      
+      // Emit an event to notify the UI that servers have changed (even in failure case)
+      this.emit('mcp-servers-changed');
+      
+      return { 
+        success: false, 
+        error: (error as Error).message 
+      };
     }
   }
 }
