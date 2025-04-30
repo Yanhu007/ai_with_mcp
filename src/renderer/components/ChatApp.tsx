@@ -332,11 +332,18 @@ const ChatApp: React.FC = () => {
     return null;
   };
 
+  // Function to handle clearing chat history and system messages
+  const handleClearChat = () => {
+    setChatHistory([]);
+    setSystemMessages([]);
+  };
+
   return (
     <div className="container">
       <ChatHeader 
         onConfigClick={handleConfigClick}
         onMcpConfigClick={handleMcpConfigClick}
+        onClearChat={handleClearChat}
       />
       
       <div className="main-content">

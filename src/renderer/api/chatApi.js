@@ -9,6 +9,7 @@ const ipcRenderer = typeof window !== 'undefined' && window?.electron?.ipcRender
 class ChatApi {
   constructor() {
     this.availableTools = [];
+    this.fullTools = []; // New array to store all tools from marketplace
     this.config = {
       apiKey: '117a0bc586aa4711a95ca960560295cc',
       endpoint: 'https://yanhuopenapi.openai.azure.com',
@@ -47,18 +48,18 @@ class ChatApi {
     return systemMsg;
   }
 
-  // Initialize MCP Client Manager
+  // Initialize McpMarketplaceManager and McpClientManager
   async initMcpClientManager() {
     try {
-      // Get MCP client manager status
+      // First, load all tools from marketplace
+      const fullToolList = await this.loadMarketplaceTools();
+      
+      // Then get MCP client manager status
       const mcpManagerAvailable = await ipcRenderer.invoke('get-mcp-client-manager');
       
       if (mcpManagerAvailable) {
-        // Get available tools
+        // Get available tools from client manager (these are the tools with active clients)
         const tools = await ipcRenderer.invoke('get-all-mcp-tools');
-        
-        console.log('MCP Client Manager initialized with tools:', 
-          tools.map(tool => tool.name));
         
         // Format tools for Azure OpenAI API
         this.availableTools = tools.map(tool => ({
@@ -70,11 +71,31 @@ class ChatApi {
           }
         }));
 
-        return this.availableTools;
+        console.log('MCP Client Manager initialized with tools:', 
+          this.availableTools.map(tool => tool.function.name));
+
+        return fullToolList;
       }
       return [];
     } catch (error) {
       console.error('Failed to initialize MCP Client Manager:', error);
+      throw error;
+    }
+  }
+  
+  // Load marketplace tools from MCP marketplace manager
+  async loadMarketplaceTools() {
+    try {
+      // Get all formatted tools from marketplace
+      this.fullTools = await ipcRenderer.invoke('get-marketplace-tools');
+      
+      console.log('MCP Marketplace Manager initialized with tools:', 
+        this.fullTools.map(tool => tool.function.name));
+      
+      return this.fullTools;
+    } catch (error) {
+      console.error('Failed to load marketplace tools:', error);
+      this.fullTools = [];
       throw error;
     }
   }
@@ -194,8 +215,9 @@ class ChatApi {
       // 创建 Azure OpenAI 客户端
       const endpoint = `${this.config.endpoint}/openai/deployments/${this.config.deploymentName}`;
       const client = new ModelClient(endpoint, new AzureKeyCredential(this.config.apiKey));
-
+      
       // 对于中间结果，不使用流式输出，直接获取完整响应
+      // Using fullTools instead of availableTools to include all possible tools
       const response = await client.path("/chat/completions").post({
         body: {
           messages: messages,
@@ -203,7 +225,7 @@ class ChatApi {
           temperature: 0.7,
           top_p: 1,
           model: this.config.deploymentName,
-          tools: this.availableTools,
+          tools: this.fullTools, // Use fullTools instead of availableTools
           tool_choice: "auto",
           stream: false // 中间结果不使用流式输出
         }
@@ -221,7 +243,7 @@ class ChatApi {
       return result.choices[0].message;
     } catch (error) {
       console.error('Error in callAzureOpenAIWithTools:', error);
-      throw error;
+            throw error;
     }
   }
 
@@ -236,9 +258,54 @@ class ChatApi {
     const parsedArgs = JSON.parse(args);
 
     console.log(`Executing tool: ${name}, arguments:`, parsedArgs);
+    // Now execute the tool through IPC
+    this.addUISystemMessage(`Using tool: ${name}...`);
 
     try {
-      // Execute tool through IPC 
+      // First, check if the MCP client for this tool exists
+      const clientExists = await ipcRenderer.invoke('has-client-for-tool', name);
+      
+      if (!clientExists) {
+        // Get server info for the tool from marketplace
+        const serverInfo = await ipcRenderer.invoke('get-server-for-tool', name);
+        
+        if (!serverInfo) {
+          throw new Error(`No MCP server configuration found for tool: ${name}`);
+        }
+        
+        // Add UI system message about configuring server
+        this.addUISystemMessage(`MCP server ${serverInfo.name} not configured yet...`);
+        this.addUISystemMessage(`Configuring MCP server ${serverInfo.name}...`);
+        
+        // Configure the server through McpClientManager
+        const serverConfigObj = { mcpServers: { [serverInfo.name]: {} } };
+        
+        if (serverInfo.transport === 'sse') {
+          serverConfigObj.mcpServers[serverInfo.name].url = serverInfo.serverLink;
+        } else {
+          serverConfigObj.mcpServers[serverInfo.name].command = serverInfo.command;
+          serverConfigObj.mcpServers[serverInfo.name].args = serverInfo.args;
+        }
+        
+        // Add the server to the McpClientManager
+        await ipcRenderer.invoke('add-mcp-server', serverConfigObj);
+        
+        // Wait a bit for the server to start
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        
+        // Get the client to check if it's properly configured
+        const client = await ipcRenderer.invoke('get-client-for-server', serverInfo.name);
+        
+        if (client) {
+          this.addUISystemMessage(`Configured MCP server ${serverInfo.name} with ${client.tools?.length || 0} tools available`);
+        } else {
+          throw new Error(`Failed to configure MCP server ${serverInfo.name}`);
+        }
+
+        // Now execute the tool through IPC
+        this.addUISystemMessage(`Using tool: ${name}...`);
+      }
+      
       const result = await ipcRenderer.invoke('execute-mcp-tool', { 
         toolName: name, 
         toolArgs: parsedArgs 
@@ -278,6 +345,8 @@ class ChatApi {
     let requiresFollowUp = true;
     let toolResults = [];
     let currentMessages = [...messages];
+
+    this.addUISystemMessage(`Thinking ...`);
     
     while (requiresFollowUp) {
       // Check if the last message is from assistant and contains tool calls
@@ -355,9 +424,6 @@ class ChatApi {
           if (onToolUse) {
             onToolUse(toolName);
           }
-          
-          // Add UI system message
-          this.addUISystemMessage(`Using tool: ${toolName}...`);
 
           // Execute tool call
           try {

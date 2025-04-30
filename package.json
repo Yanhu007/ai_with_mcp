@@ -8,7 +8,8 @@
     "watch": "concurrently \"tsc -w\" \"webpack --watch\"",
     "dev": "npm run build && electron-builder --dir",
     "dist": "npm run build && electron-builder",
-    "test": "jest"
+    "test": "jest",
+    "collect-mcp-tools": "ts-node scripts/get_mcp_tools.ts"
   },
   "keywords": [],
   "author": "",

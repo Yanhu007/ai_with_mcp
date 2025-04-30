@@ -4,12 +4,23 @@ import React from 'react';
 interface ChatHeaderProps {
   onConfigClick: () => void;
   onMcpConfigClick: () => void;
+  onClearChat: () => void;
 }
 
-const ChatHeader: React.FC<ChatHeaderProps> = ({ onConfigClick, onMcpConfigClick }) => {
+const ChatHeader: React.FC<ChatHeaderProps> = ({ onConfigClick, onMcpConfigClick, onClearChat }) => {
   return (
     <header>
-      <h1>Chat with MCPs</h1>
+      <div className="header-title">
+        <h1>Chat with MCPs</h1>
+        <button 
+          id="clearChatBtn" 
+          className="clear-btn" 
+          onClick={onClearChat} 
+          title="Clear Chat History"
+        >
+          🧹
+        </button>
+      </div>
       <div className="header-buttons">
         <button 
           id="mcpConfigBtn" 

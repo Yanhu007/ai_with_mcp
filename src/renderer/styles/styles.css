@@ -31,6 +31,12 @@ header {
   color: #fff;
 }
 
+.header-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
 h1 {
   font-size: 1.5rem;
   margin: 0;
@@ -736,4 +742,28 @@ pre {
   line-height: 1.4;
   max-height: 300px;
   overflow-y: auto;
+}
+
+/* Clear button styles */
+.clear-btn {
+  background: none;
+  border: 1px solid rgba(255, 255, 255, 0.5);
+  color: white;
+  border-radius: 4px;
+  padding: 4px 8px;
+  cursor: pointer;
+  font-size: 1rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+}
+
+.clear-btn:hover {
+  background-color: rgba(255, 255, 255, 0.2);
+  border-color: white;
+}
+
+.clear-btn:active {
+  transform: scale(0.95);
 }

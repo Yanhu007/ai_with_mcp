@@ -3,6 +3,7 @@ import * as path from 'path';
 import * as fs from 'fs';
 import * as dotenv from 'dotenv';
 import { MCPClientManager } from './main/services/mcpClientManager';
+import { McpMarketPlaceManager } from './main/services/mcpMarketPlaceManager';
 
 // 加载环境变量
 dotenv.config();
@@ -11,6 +12,8 @@ dotenv.config();
 let mainWindow: BrowserWindow | null = null;
 // Initialize MCPClientManager instance
 let mcpClientManager: MCPClientManager | null = null;
+// Initialize McpMarketPlaceManager instance
+let mcpMarketPlaceManager: McpMarketPlaceManager | null = null;
 
 async function initMcpClientManager() {
   try {
@@ -19,6 +22,16 @@ async function initMcpClientManager() {
     console.log('MCP Client Manager initialized successfully');
   } catch (error) {
     console.error('Failed to initialize MCPClientManager:', error);
+  }
+}
+
+async function initMcpMarketPlaceManager() {
+  try {
+    mcpMarketPlaceManager = new McpMarketPlaceManager();
+    await mcpMarketPlaceManager.initialize();
+    console.log('MCP Marketplace Manager initialized successfully');
+  } catch (error) {
+    console.error('Failed to initialize McpMarketPlaceManager:', error);
   }
 }
 
@@ -56,6 +69,7 @@ function createWindow() {
 
 // Create window when Electron is ready
 app.whenReady().then(async () => {
+  await initMcpMarketPlaceManager(); // Initialize marketplace manager first
   await initMcpClientManager();
   setupIpcHandlers();
   createWindow();
@@ -116,6 +130,95 @@ ipcMain.handle('load-config', async () => {
         apiVersion: '2023-05-15'
       }
     };
+  }
+});
+
+// IPC handlers for MCP Marketplace functionality
+ipcMain.handle('get-marketplace-tools', async () => {
+  if (!mcpMarketPlaceManager) {
+    console.log('MCP Marketplace Manager not initialized, trying to initialize now');
+    await initMcpMarketPlaceManager();
+    
+    if (!mcpMarketPlaceManager) {
+      throw new Error('Failed to initialize MCP Marketplace Manager');
+    }
+  }
+  
+  try {
+    const formattedTools = mcpMarketPlaceManager.getAllFormattedTools();
+    return formattedTools;
+  } catch (error) {
+    console.error('Error getting marketplace tools:', error);
+    throw error;
+  }
+});
+
+ipcMain.handle('get-server-for-tool', async (event, toolName) => {
+  if (!mcpMarketPlaceManager) {
+    console.log('MCP Marketplace Manager not initialized, trying to initialize now');
+    await initMcpMarketPlaceManager();
+    
+    if (!mcpMarketPlaceManager) {
+      throw new Error('Failed to initialize MCP Marketplace Manager');
+    }
+  }
+  
+  try {
+    const serverConfig = mcpMarketPlaceManager.getServerConfigForTool(toolName);
+    return serverConfig;
+  } catch (error) {
+    console.error(`Error getting server config for tool ${toolName}:`, error);
+    throw error;
+  }
+});
+
+ipcMain.handle('has-client-for-tool', async (event, toolName) => {
+  if (!mcpClientManager) {
+    console.log('MCP Client Manager not initialized, trying to initialize now');
+    await initMcpClientManager();
+    
+    if (!mcpClientManager) {
+      return false;
+    }
+  }
+  
+  try {
+    const client = mcpClientManager.getClientByToolName(toolName);
+    return client !== undefined;
+  } catch (error) {
+    console.error(`Error checking client for tool ${toolName}:`, error);
+    return false;
+  }
+});
+
+ipcMain.handle('get-client-for-server', async (event, serverName) => {
+  if (!mcpClientManager) {
+    console.log('MCP Client Manager not initialized, trying to initialize now');
+    await initMcpClientManager();
+    
+    if (!mcpClientManager) {
+      return null;
+    }
+  }
+  
+  try {
+    const client = mcpClientManager.getClientByServerName(serverName);
+    
+    if (!client) {
+      return null;
+    }
+    
+    // We need to return a simplified version of the client since we can't send
+    // the entire client object over IPC
+    const tools = await client.getTools();
+    
+    return {
+      serverName,
+      tools
+    };
+  } catch (error) {
+    console.error(`Error getting client for server ${serverName}:`, error);
+    return null;
   }
 });
 

@@ -1,39 +1,7 @@
 {
   "mcpServers": {
-    "fetch": {
-      "command": "uvx",
-      "args": [
-        "mcp-server-fetch"
-      ]
-    },
-    "playwright": {
-      "command": "npx",
-      "args": [
-        "@playwright/mcp@latest",
-        "--browser",
-        "msedge"
-      ]
-    },
-    "Demo": {
-      "command": "uv",
-      "args": [
-        "--directory",
-        "C:\\Repo\\mcp-demo\\mcp-server-demo",
-        "run",
-        "server.py"
-      ]
-    },
-    "Demo-SSE": {
-      "url": "http://0.0.0.0:8000/sse"
-    },
-    "filesystem": {
-      "command": "npx",
-      "args": [
-        "-y",
-        "@modelcontextprotocol/server-filesystem",
-        "C:\\Users\\yanhu\\Desktop",
-        "C:\\Users\\yanhu\\Downloads"
-      ]
+    "amap-amap-sse": {
+      "url": "https://mcp.amap.com/sse?key=dd2ef196ca6b1e6250acbe4ea36221a0"
     }
   }
 }
