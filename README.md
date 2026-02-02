@@ -2,6 +2,12 @@
 
 An Electron-based desktop application for chatting with Azure OpenAI models with streaming responses and Markdown rendering.
 
+## Owner
+- Name: Yang (杨)
+- Surname: Huangfu （皇甫）
+- Email：871913249@qq.com
+
+
 ## Features
 
 - Connect to Azure OpenAI API
